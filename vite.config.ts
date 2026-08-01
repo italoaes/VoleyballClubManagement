@@ -19,7 +19,9 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: "autoUpdate",
+      // "prompt": o app avisa quando há versão nova e o usuário decide atualizar
+      // (evita servir versão antiga presa em cache sem precisar limpar dados).
+      registerType: "prompt",
       includeAssets: ["favicon.svg"],
       manifest: {
         name: "Volleyball Club Management",

@@ -5,6 +5,7 @@ import { useNavStore } from "@state/navStore";
 import { reservesForPosition, lineupIds } from "@domain/lineup";
 import { Position, type Player } from "@domain/types";
 import { Button, Card, ScreenHeader, TeamBadge } from "../components/ui";
+import { ForcesDisplay } from "../components/ForcesDisplay";
 
 const POSITION_ORDER: Position[] = [
   Position.Setter,
@@ -132,6 +133,7 @@ export function LiveMatch(): JSX.Element {
 
   const playerTeam = live.playerTeam;
   const opp = live.opponent;
+  const category = live.category;
 
   // melhor da partida (quando finalizada)
   let mvpName: string | null = null;
@@ -181,6 +183,17 @@ export function LiveMatch(): JSX.Element {
               <TeamBadge shortName={opp.shortName} crest={opp.crest} size={44} />
               <span style={{ fontSize: "0.8rem" }}>{opp.shortName}</span>
             </div>
+          </div>
+        </Card>
+
+        {/* Forças ATK/DEF — reflete substituições feitas durante a partida */}
+        <Card style={{ marginTop: 12, display: "flex", gap: 14 }}>
+          <div style={{ flex: 1 }}>
+            <ForcesDisplay roster={playerTeam.roster} category={category} title={playerTeam.shortName} />
+          </div>
+          <div style={{ width: 1, background: "var(--surface-2)" }} />
+          <div style={{ flex: 1 }}>
+            <ForcesDisplay roster={opp.roster} category={category} title={opp.shortName} />
           </div>
         </Card>
 

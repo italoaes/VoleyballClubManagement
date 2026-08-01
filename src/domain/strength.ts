@@ -3,9 +3,19 @@
  */
 
 import { officialConfig } from "@engine/config";
-import { pregameStrength } from "@engine/forces";
+import { baseForces, pregameStrength, type Forces } from "@engine/forces";
 import { courtAverages } from "./lineup";
-import type { Category, Team } from "./types";
+import type { Category, Roster, Team } from "./types";
+
+/**
+ * Forças ATK/DEF do time a partir de uma escalação (roster). Reflete a regra do
+ * líbero e o bônus do MVP-estrela em quadra (ambos aplicados em courtAverages).
+ * É a mesma base usada pelo motor — ideal para exibir ao jogador.
+ */
+export function rosterForces(roster: Roster, category: Category = "male"): Forces {
+  const cfg = officialConfig(category);
+  return baseForces(courtAverages(roster), cfg);
+}
 
 /** Força pré-jogo escalar do time (a partir da escalação atual). */
 export function teamStrength(team: Team, category: Category = "male"): number {

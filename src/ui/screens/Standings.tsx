@@ -6,11 +6,12 @@ import { Button, ScreenHeader, TeamBadge } from "../components/ui";
 export function Standings(): JSX.Element {
   const state = useGameStore((s) => s.state);
   const go = useNavStore((s) => s.go);
+  const viewTeam = useNavStore((s) => s.viewTeam);
   if (!state) return <p style={{ padding: "1rem" }}>Carregando…</p>;
 
   return (
     <div>
-      <ScreenHeader title="Classificação" subtitle="Top 8 avançam ao mata-mata" />
+      <ScreenHeader title="Classificação" subtitle="Toque num time para ver o elenco" />
       <div style={{ padding: "0 0.5rem" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
           <thead>
@@ -31,11 +32,13 @@ export function Standings(): JSX.Element {
               return (
                 <tr
                   key={s.teamId}
+                  onClick={() => viewTeam(s.teamId, "standings")}
                   style={{
                     background: isPlayer ? "var(--surface-2)" : "transparent",
                     color: isPlayer ? "var(--accent)" : "var(--text)",
                     fontWeight: isPlayer ? 800 : 400,
                     borderBottom: "1px solid var(--surface)",
+                    cursor: "pointer",
                   }}
                 >
                   <td style={{ padding: "0.5rem 0.4rem", textAlign: "left" }}>

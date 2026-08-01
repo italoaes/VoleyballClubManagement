@@ -3,6 +3,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 import { fileURLToPath, URL } from "node:url";
+import pkg from "./package.json" with { type: "json" };
 
 // Base configurável:
 // - APK/Capacitor e dev: "./" (caminhos relativos, servido via file://)
@@ -11,6 +12,10 @@ const base = process.env.DEPLOY_BASE ?? "./";
 
 export default defineConfig({
   base,
+  // fonte única de verdade da versão exibida (do package.json)
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+  },
   plugins: [
     react(),
     VitePWA({

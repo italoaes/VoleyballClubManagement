@@ -22,7 +22,7 @@ export default defineConfig({
       // "prompt": o app avisa quando há versão nova e o usuário decide atualizar
       // (evita servir versão antiga presa em cache sem precisar limpar dados).
       registerType: "prompt",
-      includeAssets: ["favicon.svg"],
+      includeAssets: ["favicon-32.png", "favicon-16.png", "apple-touch-icon.png"],
       manifest: {
         name: "Volleyball Club Management",
         short_name: "VCM26",

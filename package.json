@@ -1,7 +1,7 @@
 {
   "name": "volleymanager",
   "private": true,
-  "version": "26.1.0",
+  "version": "26.2.0",
   "type": "module",
   "description": "VolleyManager — jogo de gestão de vôlei (MVP jogável, web PWA mobile-first)",
   "scripts": {
@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint . --ext .ts,.tsx",
+    "icons": "node scripts/make-app-icons.mjs",
     "android:sync": "npm run build && cap sync android",
     "android:open": "cap open android",
     "android:apk": "npm run build && cap sync android && cd android && gradlew.bat assembleDebug"
@@ -36,6 +37,7 @@
     "eslint": "^8.57.1",
     "eslint-plugin-react-hooks": "^4.6.2",
     "eslint-plugin-react-refresh": "^0.4.14",
+    "jimp": "^1.6.1",
     "typescript": "^5.6.3",
     "vite": "^5.4.11",
     "vite-plugin-pwa": "^0.20.5",

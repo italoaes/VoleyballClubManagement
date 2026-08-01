@@ -21,6 +21,7 @@ import { Roster } from "./screens/Roster";
 import { DevelopmentScreen } from "./screens/DevelopmentScreen";
 import { ManagerProfile } from "./screens/ManagerProfile";
 import { Menu } from "./screens/Menu";
+import { UpdatePrompt } from "./components/UpdatePrompt";
 
 function BottomNav(): JSX.Element {
   const screen = useNavStore((s) => s.screen);
@@ -133,6 +134,7 @@ export function App(): JSX.Element {
         <CurrentScreen />
       </div>
       <BottomNav />
+      <UpdatePrompt />
     </div>
   );
 }

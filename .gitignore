@@ -1,0 +1,12 @@
+node_modules
+dist
+dist-ssr
+*.local
+.DS_Store
+*.log
+coverage
+.vite
+
+# Android (Capacitor) — projeto gerado localmente, não versionar
+# (recriável com `npx cap add android`). Deploy é via GitHub Pages (web).
+android/

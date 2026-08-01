@@ -1,0 +1,257 @@
+{
+  "schemaVersion": 1,
+  "officialParams": {
+    "k": 0.4,
+    "scale": 25.0,
+    "anchor": 0.65,
+    "anchorFemale": 0.61,
+    "setPoints": 25,
+    "tiebreakPoints": 15,
+    "minLead": 2,
+    "weights": {
+      "atk_attack": 0.4,
+      "atk_set": 0.3,
+      "atk_serve": 0.3,
+      "def_block": 0.4,
+      "def_receive": 0.3,
+      "def_libero": 0.3
+    }
+  },
+  "deterministic": [
+    {
+      "name": "break_prob_even",
+      "fn": "break_probability",
+      "inputs": {
+        "atk_receiver": 60.0,
+        "def_server": 60.0
+      },
+      "expected": 0.65,
+      "tolerance": 1e-09
+    },
+    {
+      "name": "break_prob_gap",
+      "fn": "break_probability",
+      "inputs": {
+        "atk_receiver": 70.0,
+        "def_server": 55.0
+      },
+      "expected": 0.702459878366712,
+      "tolerance": 1e-09
+    },
+    {
+      "name": "break_prob_gap_negative",
+      "fn": "break_probability",
+      "inputs": {
+        "atk_receiver": 50.0,
+        "def_server": 72.0
+      },
+      "expected": 0.5663658910568733,
+      "tolerance": 1e-09
+    },
+    {
+      "name": "base_forces_uniform",
+      "fn": "base_forces",
+      "inputs": {
+        "attrs": {
+          "attack": 60,
+          "setting": 60,
+          "serve": 60,
+          "block": 60,
+          "receive": 60,
+          "libero": 60
+        }
+      },
+      "expected": {
+        "atk": 60.0,
+        "def": 60.0
+      },
+      "tolerance": 1e-09
+    },
+    {
+      "name": "base_forces_mixed",
+      "fn": "base_forces",
+      "inputs": {
+        "attrs": {
+          "attack": 70,
+          "setting": 65,
+          "serve": 60,
+          "block": 50,
+          "receive": 55,
+          "libero": 45
+        }
+      },
+      "expected": {
+        "atk": 65.5,
+        "def": 50.0
+      },
+      "tolerance": 1e-09
+    },
+    {
+      "name": "logit_anchor",
+      "fn": "logit",
+      "inputs": {
+        "p": 0.65
+      },
+      "expected": 0.6190392084062236,
+      "tolerance": 1e-09
+    },
+    {
+      "name": "momentum_term_streak3_receiver",
+      "fn": "momentum_term",
+      "inputs": {
+        "streak_len": 3,
+        "streak_is_receiver": true,
+        "gain": 0.4,
+        "scale": 3.0
+      },
+      "expected": 0.23311317813916405,
+      "tolerance": 1e-09
+    },
+    {
+      "name": "momentum_term_streak3_server",
+      "fn": "momentum_term",
+      "inputs": {
+        "streak_len": 3,
+        "streak_is_receiver": false,
+        "gain": 0.4,
+        "scale": 3.0
+      },
+      "expected": -0.23311317813916405,
+      "tolerance": 1e-09
+    }
+  ],
+  "setRules": [
+    {
+      "name": "set_end_25_23",
+      "scores": [
+        25,
+        23
+      ],
+      "limit": 25,
+      "minLead": 2,
+      "finished": true
+    },
+    {
+      "name": "set_no_end_24_24",
+      "scores": [
+        24,
+        24
+      ],
+      "limit": 25,
+      "minLead": 2,
+      "finished": false
+    },
+    {
+      "name": "set_no_end_25_24",
+      "scores": [
+        25,
+        24
+      ],
+      "limit": 25,
+      "minLead": 2,
+      "finished": false
+    },
+    {
+      "name": "set_end_26_24",
+      "scores": [
+        26,
+        24
+      ],
+      "limit": 25,
+      "minLead": 2,
+      "finished": true
+    },
+    {
+      "name": "set_end_tiebreak_15_13",
+      "scores": [
+        15,
+        13
+      ],
+      "limit": 15,
+      "minLead": 2,
+      "finished": true
+    },
+    {
+      "name": "set_no_end_tiebreak_15_14",
+      "scores": [
+        15,
+        14
+      ],
+      "limit": 15,
+      "minLead": 2,
+      "finished": false
+    }
+  ],
+  "statistical": [
+    {
+      "name": "realism_even_teams",
+      "params": {
+        "k": 0.4,
+        "scale": 25.0,
+        "anchor": 0.65
+      },
+      "population": "even_teams",
+      "teamA_rating": 60,
+      "teamB_rating": 60,
+      "seed": 42,
+      "numSimulations": 8000,
+      "measured": {
+        "side_out": 0.6503553277439387,
+        "pct_3_0": 0.248375,
+        "pct_3_1": 0.381125,
+        "pct_3_2": 0.3705,
+        "tiebreak_rate": 0.3705,
+        "mean_loser_points": 20.928830839969347
+      },
+      "expect": {
+        "side_out": {
+          "min": 0.62,
+          "max": 0.68
+        },
+        "pct_3_0": {
+          "min": 0.18,
+          "max": 0.3
+        },
+        "pct_3_1": {
+          "min": 0.3,
+          "max": 0.4
+        },
+        "pct_3_2": {
+          "min": 0.33,
+          "max": 0.45
+        },
+        "tiebreak_rate": {
+          "min": 0.35,
+          "max": 0.42
+        },
+        "mean_loser_points": {
+          "min": 17.0,
+          "max": 21.0
+        }
+      }
+    },
+    {
+      "name": "zebra_league",
+      "params": {
+        "k": 0.4,
+        "scale": 25.0,
+        "anchor": 0.65
+      },
+      "population": "league_12_55_75",
+      "numTeams": 12,
+      "ratingLow": 55,
+      "ratingHigh": 75,
+      "seed": 7,
+      "numSimulations": 8000,
+      "measured": {
+        "zebra_rate": 0.22271624898949072
+      },
+      "expect": {
+        "zebra_rate": {
+          "min": 0.2,
+          "max": 0.3
+        }
+      }
+    }
+  ]
+}

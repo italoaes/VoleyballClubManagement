@@ -1,0 +1,8 @@
+{
+  "appId": "com.vcm26.volleyball",
+  "appName": "VCM26",
+  "webDir": "dist",
+  "android": {
+    "allowMixedContent": false
+  }
+}

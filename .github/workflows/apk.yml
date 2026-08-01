@@ -1,0 +1,59 @@
+name: Build Android APK
+
+on:
+  push:
+    tags:
+      - "v*" # mesma tag que publica o site
+  workflow_dispatch:
+
+permissions:
+  contents: write # necessário para criar a Release e anexar o APK
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Java (JDK 17)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web (base relativa p/ APK)
+        run: npm run build
+        # sem DEPLOY_BASE => base "./" (relativa), correta para o APK
+
+      - name: Add Android platform (recriável)
+        run: npx cap add android
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Build debug APK
+        run: cd android && chmod +x gradlew && ./gradlew assembleDebug
+
+      - name: Rename APK with version
+        run: |
+          mkdir -p out
+          cp android/app/build/outputs/apk/debug/app-debug.apk "out/VCM26-${GITHUB_REF_NAME}.apk"
+
+      - name: Publish APK to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/VCM26-${{ github.ref_name }}.apk
+          name: VCM26 ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true

@@ -7,6 +7,7 @@ import { AVATARS, defaultAvatar } from "@domain/avatars";
 import type { Category } from "@domain/types";
 import { listSaves, SLOT_IDS, type SaveMeta } from "@persistence/saveStore";
 import { Button, Card, ScreenHeader, StarRating, TeamBadge } from "../components/ui";
+import { assetUrl } from "../asset";
 
 export function NewGame(): JSX.Element {
   const startNewGame = useGameStore((s) => s.startNewGame);
@@ -80,7 +81,7 @@ export function NewGame(): JSX.Element {
                   lineHeight: 0,
                 }}
               >
-                <img src={a.src} alt={a.id} width={56} height={56} style={{ borderRadius: "50%" }} />
+                <img src={assetUrl(a.src)} alt={a.id} width={56} height={56} style={{ borderRadius: "50%" }} />
               </button>
             ))}
           </div>

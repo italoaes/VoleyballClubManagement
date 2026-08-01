@@ -3,6 +3,7 @@
  */
 
 import type { CSSProperties, ReactNode } from "react";
+import { assetUrl } from "../asset";
 
 export function Card({
   children,
@@ -96,7 +97,7 @@ export function TeamBadge({
   if (crest) {
     return (
       <img
-        src={crest}
+        src={assetUrl(crest)}
         alt={shortName}
         width={size}
         height={size}
@@ -132,7 +133,7 @@ export function StarRating({ stars, size = 14 }: { stars: number; size?: number 
       {Array.from({ length: 5 }, (_, i) => (
         <img
           key={i}
-          src="/assets/ui/star.png"
+          src={assetUrl("/assets/ui/star.png")}
           alt=""
           width={size}
           height={size}

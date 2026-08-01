@@ -54,6 +54,7 @@ import type {
   MatchResult,
   Player,
   PlayoffBracket,
+  PlayoffTie,
   Team,
 } from "@domain/types";
 import { SCHEMA_VERSION } from "@domain/types";
@@ -265,8 +266,10 @@ export function initPlayoffs(standingsOrder: string[]): PlayoffBracket {
 }
 
 /**
- * Avança o mata-mata JOGO A JOGO: resolve a próxima partida pendente do bracket
- * (quartas -> semis -> final). Uma chamada = um jogo.
+ * Avança o mata-mata por RODADA de jogos: a cada chamada, joga UM jogo em CADA
+ * confronto ainda não decidido da fase corrente ao mesmo tempo (jogos 1 de todos,
+ * depois jogos 2 de todos, depois os jogos 3 de desempate). Só passa de fase
+ * (quartas -> semis -> final) quando todos os confrontos da fase terminam.
  */
 export function advancePlayoffStage(state: GameState): GameState {
   if (state.phase !== "playoffs" || !state.playoffs) return state;
@@ -275,13 +278,17 @@ export function advancePlayoffStage(state: GameState): GameState {
   const byId = teamsById(state.teams);
   const bracket = state.playoffs;
 
-  // === QUARTAS: joga um jogo do primeiro tie pendente ===
-  const qIdx = bracket.quarters.findIndex((t) => t.winnerId === null);
-  if (qIdx >= 0) {
-    const rng = new Rng(state.seed).spawn(20000 + qIdx * 10 + bracket.quarters[qIdx]!.games.length);
-    const quarters = [...bracket.quarters];
-    quarters[qIdx] = playOneGame(quarters[qIdx]!, byId, cfg, rng);
-    // se com isso as quartas terminaram, monta as semis
+  // Joga um jogo em cada tie pendente de um conjunto (avanço paralelo).
+  const playRoundOfTies = (ties: PlayoffTie[], salt: number): PlayoffTie[] =>
+    ties.map((tie, i) => {
+      if (tie.winnerId) return tie; // já decidido: não joga mais
+      const rng = new Rng(state.seed).spawn(salt + i * 100 + tie.games.length);
+      return playOneGame(tie, byId, cfg, rng);
+    });
+
+  // === QUARTAS ===
+  if (bracket.quarters.some((t) => t.winnerId === null)) {
+    const quarters = playRoundOfTies(bracket.quarters, 20000);
     const semis = quarters.every((t) => t.winnerId)
       ? buildSemis(quarters.map(tieWinnerSeeded))
       : bracket.semis;
@@ -289,17 +296,12 @@ export function advancePlayoffStage(state: GameState): GameState {
   }
 
   // === SEMIS ===
-  if (bracket.semis.length > 0) {
-    const sIdx = bracket.semis.findIndex((t) => t.winnerId === null);
-    if (sIdx >= 0) {
-      const rng = new Rng(state.seed).spawn(30000 + sIdx * 10 + bracket.semis[sIdx]!.games.length);
-      const semis = [...bracket.semis];
-      semis[sIdx] = playOneGame(semis[sIdx]!, byId, cfg, rng);
-      const final = semis.every((t) => t.winnerId)
-        ? buildFinal(semis.map(tieWinnerSeeded))
-        : bracket.final;
-      return { ...state, playoffs: { ...bracket, semis, final } };
-    }
+  if (bracket.semis.length > 0 && bracket.semis.some((t) => t.winnerId === null)) {
+    const semis = playRoundOfTies(bracket.semis, 30000);
+    const final = semis.every((t) => t.winnerId)
+      ? buildFinal(semis.map(tieWinnerSeeded))
+      : bracket.final;
+    return { ...state, playoffs: { ...bracket, semis, final } };
   }
 
   // === FINAL (jogo único) ===

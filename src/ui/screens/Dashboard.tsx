@@ -10,6 +10,7 @@ import { totalRounds } from "@domain/league";
 import { seasonLabel } from "@domain/career";
 import type { GameState } from "@domain/types";
 import { Button, Card, FormBar, ScreenHeader, TeamBadge } from "../components/ui";
+import { assetUrl } from "../asset";
 
 function NextMatchCard({ state }: { state: GameState }): JSX.Element {
   const fx = nextPlayerFixture(state);
@@ -88,7 +89,7 @@ function ManagerBar({ state, onOpen }: { state: GameState; onOpen: () => void })
       }}
     >
       <img
-        src={state.managerAvatar}
+        src={assetUrl(state.managerAvatar)}
         alt="avatar"
         width={44}
         height={44}

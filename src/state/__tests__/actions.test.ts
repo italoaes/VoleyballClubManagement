@@ -155,18 +155,23 @@ describe("actions: múltiplas temporadas e carreira", () => {
     expect(next.history[0]!.teamId).toBe(s.playerTeamId);
   });
 
-  it("playoffs avançam JOGO A JOGO (uma partida por chamada)", () => {
+  it("playoffs avançam por RODADA: 1 jogo em cada confronto pendente", () => {
     let s = freshGame();
     while (s.phase === "league") s = advance(s);
     expect(s.phase).toBe("playoffs");
-    // primeira chamada joga 1 jogo de 1 tie das quartas
-    const totalGames = (st: typeof s): number =>
-      (st.playoffs?.quarters ?? []).reduce((a, t) => a + t.games.length, 0) +
-      (st.playoffs?.semis ?? []).reduce((a, t) => a + t.games.length, 0) +
-      (st.playoffs?.final?.games.length ?? 0);
-    const before = totalGames(s);
+    // 4 confrontos nas quartas: a primeira chamada joga o jogo 1 de TODOS (4 jogos)
+    const quarterGames = (st: typeof s): number =>
+      (st.playoffs?.quarters ?? []).reduce((a, t) => a + t.games.length, 0);
+    expect(quarterGames(s)).toBe(0);
     s = advance(s);
-    expect(totalGames(s)).toBe(before + 1);
+    expect(quarterGames(s)).toBe(4);
+    // cada confronto está 1-0 ou já com um jogo; nenhum passou de 1 jogo ainda
+    for (const t of s.playoffs!.quarters) {
+      expect(t.games.length).toBe(1);
+    }
+    // segunda chamada joga o jogo 2 de todos => 8 jogos no total das quartas
+    s = advance(s);
+    expect(quarterGames(s)).toBe(8);
   });
 });
 

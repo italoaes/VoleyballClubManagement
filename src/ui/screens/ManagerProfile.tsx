@@ -3,6 +3,7 @@ import { useNavStore } from "@state/navStore";
 import { teamById } from "@domain/selectors";
 import { seasonLabel } from "@domain/career";
 import { Button, Card, ScreenHeader } from "../components/ui";
+import { assetUrl } from "../asset";
 
 export function ManagerProfile(): JSX.Element {
   const state = useGameStore((s) => s.state);
@@ -25,7 +26,7 @@ export function ManagerProfile(): JSX.Element {
         {/* Cabeçalho do treinador */}
         <Card style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <img
-            src={state.managerAvatar}
+            src={assetUrl(state.managerAvatar)}
             alt="avatar"
             width={64}
             height={64}

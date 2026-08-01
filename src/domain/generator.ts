@@ -74,6 +74,35 @@ function makeAttributes(center: number, spread: number, rng: Rng): Attributes {
   };
 }
 
+/**
+ * Reescreve um jogador como um jovem da base (ponto 2 — "aposentar"), PRESERVANDO
+ * id, posição e número (não quebra a escalação). Novo nome, idade 17-18, atributos
+ * de base (menores) e potencial alto de jovem. Determinístico via rng.
+ */
+export function regenerateAsYouth(
+  player: Player,
+  rng: Rng,
+  usedNames: Set<string>,
+  category: Category,
+): Player {
+  const age = 17 + rng.integers(0, 2); // 17 ou 18
+  // atributos de base: faixa ~45-58 (jovem cru)
+  const attributes = makeAttributes(51, 6, rng);
+  const currentOverall = overall(attributes);
+  return {
+    ...player, // preserva id, position, number
+    name: makePlayerName(rng, usedNames, category),
+    age,
+    attributes,
+    potential: rollPotential(currentOverall, age, rng),
+    growthProgress: 0,
+    setsPlayed: 0,
+    isStar: false, // jovem novo não é estrela (o caller sincroniza reigningMvpId)
+    seasonMvpCount: 0,
+    careerMvpCount: 0, // carreira zerada (é um jogador novo)
+  };
+}
+
 function makeRoster(
   teamId: string,
   center: number,
@@ -96,6 +125,9 @@ function makeRoster(
       growthProgress: 0,
       number: i + 1,
       setsPlayed: 0,
+      isStar: false,
+      seasonMvpCount: 0,
+      careerMvpCount: 0,
     };
   });
 

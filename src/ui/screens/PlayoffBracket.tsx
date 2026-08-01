@@ -38,6 +38,30 @@ function TieRow({ tie, state }: { tie: PlayoffTie; state: GameState }): JSX.Elem
       <div style={{ color: "var(--text-dim)", fontSize: "0.72rem", marginTop: 4 }}>
         {tie.bestOf === 1 ? "Jogo único" : "Melhor de 3"} · {tie.games.length} jogo(s)
       </div>
+      {tie.games.length > 0 ? (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+          {tie.games.map((g, i) => {
+            // placar sempre na ótica do high seed
+            const highIsHome = g.homeId === tie.high.teamId;
+            const highSets = highIsHome ? g.setsHome : g.setsAway;
+            const lowSets = highIsHome ? g.setsAway : g.setsHome;
+            return (
+              <span
+                key={i}
+                style={{
+                  fontSize: "0.78rem",
+                  padding: "1px 7px",
+                  borderRadius: 6,
+                  background: "var(--bg)",
+                  border: "1px solid var(--surface-2)",
+                }}
+              >
+                {highSets}-{lowSets}
+              </span>
+            );
+          })}
+        </div>
+      ) : null}
     </Card>
   );
 }
@@ -78,7 +102,12 @@ export function PlayoffBracket(): JSX.Element {
   const onAdvance = (): void => {
     advance();
     const after = useGameStore.getState().state!;
-    if (after.phase === "finished") go("season-end");
+    if (after.pendingPlayoffGame) {
+      // é a vez do jogador: abre a prévia (jogar/simular)
+      go("match-preview");
+    } else if (after.phase === "finished") {
+      go("season-end");
+    }
   };
 
   return (

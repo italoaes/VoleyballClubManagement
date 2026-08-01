@@ -138,6 +138,89 @@ const migrations: Record<number, Migration> = {
     }
     return data;
   },
+  // v5 -> v6: MVP (isStar em Player, mvpId em MatchResult, reigningMvpId/seasonMvpTally
+  // no GameState) e pendingPlayoffGame (playoff ao vivo).
+  5: (data) => {
+    const teams = Array.isArray(data["teams"]) ? (data["teams"] as unknown[]) : [];
+    for (const team of teams) {
+      const t = team as Record<string, unknown>;
+      const roster = t["roster"] as Record<string, unknown> | undefined;
+      const players = roster && Array.isArray(roster["players"]) ? (roster["players"] as unknown[]) : [];
+      for (const pl of players) {
+        const p = pl as Record<string, unknown>;
+        if (typeof p["isStar"] !== "boolean") p["isStar"] = false;
+        if (typeof p["matchMvpCount"] !== "number") p["matchMvpCount"] = 0;
+      }
+    }
+    // mvpId = null em todos os MatchResults históricos (fixtures + playoffs)
+    const fixtures = Array.isArray(data["fixtures"]) ? (data["fixtures"] as unknown[]) : [];
+    for (const fx of fixtures) {
+      const f = fx as Record<string, unknown>;
+      const r = f["result"] as Record<string, unknown> | null | undefined;
+      if (r && typeof r === "object" && !("mvpId" in r)) r["mvpId"] = null;
+    }
+    const playoffs = data["playoffs"] as Record<string, unknown> | null | undefined;
+    if (playoffs && typeof playoffs === "object") {
+      const patchGames = (ties: unknown): void => {
+        if (!Array.isArray(ties)) return;
+        for (const tie of ties) {
+          const games = (tie as Record<string, unknown>)["games"];
+          if (Array.isArray(games)) {
+            for (const g of games) {
+              const gr = g as Record<string, unknown>;
+              if (!("mvpId" in gr)) gr["mvpId"] = null;
+            }
+          }
+        }
+      };
+      patchGames(playoffs["quarters"]);
+      patchGames(playoffs["semis"]);
+      const fin = playoffs["final"] as Record<string, unknown> | null | undefined;
+      if (fin && Array.isArray(fin["games"])) {
+        for (const g of fin["games"] as unknown[]) {
+          const gr = g as Record<string, unknown>;
+          if (!("mvpId" in gr)) gr["mvpId"] = null;
+        }
+      }
+    }
+    if (!("reigningMvpId" in data)) data["reigningMvpId"] = null;
+    if (!data["seasonMvpTally"]) data["seasonMvpTally"] = {};
+    if (!("pendingPlayoffGame" in data)) data["pendingPlayoffGame"] = null;
+    return data;
+  },
+  // v6 -> v7: jogadores ganham `matchMvpCount` (contador de "melhor da partida").
+  // Necessário porque saves criados em v6 antes deste campo não têm o valor.
+  6: (data) => {
+    const teams = Array.isArray(data["teams"]) ? (data["teams"] as unknown[]) : [];
+    for (const team of teams) {
+      const t = team as Record<string, unknown>;
+      const roster = t["roster"] as Record<string, unknown> | undefined;
+      const players = roster && Array.isArray(roster["players"]) ? (roster["players"] as unknown[]) : [];
+      for (const pl of players) {
+        const p = pl as Record<string, unknown>;
+        if (typeof p["matchMvpCount"] !== "number") p["matchMvpCount"] = 0;
+      }
+    }
+    return data;
+  },
+  // v7 -> v8: separa contador de MVP em temporada (zera) e carreira (acumula).
+  // O `matchMvpCount` antigo era acumulado => vira `careerMvpCount`.
+  7: (data) => {
+    const teams = Array.isArray(data["teams"]) ? (data["teams"] as unknown[]) : [];
+    for (const team of teams) {
+      const t = team as Record<string, unknown>;
+      const roster = t["roster"] as Record<string, unknown> | undefined;
+      const players = roster && Array.isArray(roster["players"]) ? (roster["players"] as unknown[]) : [];
+      for (const pl of players) {
+        const p = pl as Record<string, unknown>;
+        const old = typeof p["matchMvpCount"] === "number" ? (p["matchMvpCount"] as number) : 0;
+        if (typeof p["careerMvpCount"] !== "number") p["careerMvpCount"] = old;
+        if (typeof p["seasonMvpCount"] !== "number") p["seasonMvpCount"] = 0;
+        delete p["matchMvpCount"];
+      }
+    }
+    return data;
+  },
 };
 
 export class SaveVersionError extends Error {}

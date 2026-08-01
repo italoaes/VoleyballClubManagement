@@ -165,6 +165,27 @@ export function playOneGame(
   return { ...tie, games, winsHigh, winsLow, winnerId };
 }
 
+/**
+ * Aplica um MatchResult JÁ produzido (ex.: partida ao vivo do jogador) ao próximo
+ * jogo pendente do tie, atualizando placar/vencedor. Espelha `playOneGame`, mas
+ * com o resultado vindo de fora (não simula). `result.winnerId` deve ser um dos times.
+ */
+export function applyPlayoffGameResult(tie: PlayoffTie, result: MatchResult): PlayoffTie {
+  if (tie.winnerId) return tie;
+  const winsNeeded = tie.bestOf === 1 ? 1 : 2;
+  const games = [...tie.games, result];
+  const winsHigh = tie.winsHigh + (result.winnerId === tie.high.teamId ? 1 : 0);
+  const winsLow = tie.winsLow + (result.winnerId === tie.low.teamId ? 1 : 0);
+  const decided = winsHigh >= winsNeeded || winsLow >= winsNeeded;
+  const winnerId = decided ? (winsHigh > winsLow ? tie.high.teamId : tie.low.teamId) : null;
+  return { ...tie, games, winsHigh, winsLow, winnerId };
+}
+
+/** true se o confronto envolve o time informado. */
+export function tieHasTeam(tie: PlayoffTie, teamId: string): boolean {
+  return tie.high.teamId === teamId || tie.low.teamId === teamId;
+}
+
 /** Seeded do vencedor de um tie já resolvido. */
 export function tieWinnerSeeded(tie: PlayoffTie): Seeded {
   if (!tie.winnerId) throw new Error(`tie ${tie.id} não resolvido`);

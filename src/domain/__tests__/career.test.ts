@@ -4,6 +4,8 @@ import {
   objectiveForTeam,
   evaluateObjective,
   generateOffers,
+  managerReputation,
+  requiredReputation,
 } from "../career";
 import { generateLeague, DEFAULT_GENERATE } from "../generator";
 
@@ -50,24 +52,50 @@ describe("carreira: propostas", () => {
     expect(renewal!.teamId).toBe(current.id);
   });
 
-  it("bom desempenho gera propostas de times melhores", () => {
+  it("bom desempenho (campeão + meta) gera propostas externas", () => {
     const ts = teams();
-    const current = ts[ts.length - 1]!; // fraco (muitas estrelas de folga)
-    // campeão + objetivo cumprido + 1º lugar => alta reputação
+    const current = ts[ts.length - 1]!; // fraco, mas superou tudo
+    // campeão + objetivo cumprido + 1º lugar => reputação máxima
     const offers = generateOffers(current, ts, 1, true, true, ts.length, 42);
     const external = offers.filter((o) => !o.isRenewal);
     expect(external.length).toBeGreaterThan(0);
-    // propostas externas são de times iguais ou melhores
+  });
+
+  it("desempenho fraco NÃO gera proposta de time forte (o bug do print)", () => {
+    const ts = teams();
+    // time fraco (2★, penúltimo) que NÃO cumpriu a meta => reputação baixa
+    const current = ts[ts.length - 1]!;
+    const penultimate = ts.length - 1; // penúltimo de N
+    const offers = generateOffers(current, ts, penultimate, false, false, ts.length, 42);
+    const external = offers.filter((o) => !o.isRenewal);
+    // nenhuma proposta de time 4-5 estrelas para quem foi mal
     for (const o of external) {
-      expect(o.stars).toBeGreaterThanOrEqual(offers[0]!.stars);
+      expect(o.stars).toBeLessThanOrEqual(3);
     }
   });
 
-  it("desempenho fraco pode não gerar propostas externas", () => {
-    const ts = teams();
-    const current = ts[0]!; // já é o mais forte
-    const offers = generateOffers(current, ts, 12, false, false, ts.length, 1);
-    // só a renovação (nenhum time melhor que o mais forte)
-    expect(offers.filter((o) => !o.isRenewal).length).toBe(0);
+  it("reputação: cair na parte de baixo sem cumprir a meta zera a reputação", () => {
+    const low = managerReputation({
+      currentStars: 2,
+      leaguePosition: 11,
+      numTeams: 12,
+      objectiveMet: false,
+      wasChampion: false,
+    });
+    expect(low).toBe(0);
+
+    const high = managerReputation({
+      currentStars: 2,
+      leaguePosition: 1,
+      numTeams: 12,
+      objectiveMet: true,
+      wasChampion: true,
+    });
+    expect(high).toBeGreaterThanOrEqual(9);
+  });
+
+  it("times fortes exigem reputação alta (requiredReputation)", () => {
+    expect(requiredReputation(5)).toBeGreaterThan(requiredReputation(3));
+    expect(requiredReputation(3)).toBeGreaterThan(requiredReputation(1));
   });
 });

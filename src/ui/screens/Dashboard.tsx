@@ -133,11 +133,12 @@ export function Dashboard(): JSX.Element {
         ? `Temporada ${seasonLabel(state.season)} · Playoffs`
         : "Temporada encerrada";
 
-  // mata-mata continua com avanço rápido (jogos do jogador e demais simulados)
+  // mata-mata: avança; se for a vez do jogador, abre a prévia (jogar/simular)
   const advancePlayoffs = (): void => {
     advance();
     const after = useGameStore.getState().state!;
-    if (after.phase === "finished") go("season-end");
+    if (after.pendingPlayoffGame) go("match-preview");
+    else if (after.phase === "finished") go("season-end");
     else go("playoffs");
   };
 

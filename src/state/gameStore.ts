@@ -12,8 +12,10 @@ import {
   advance,
   cancelTraining,
   commitPlayerRound,
+  commitPlayoffGame,
   investPD,
   newGame,
+  recyclePlayer,
   startNextSeason,
   startTraining,
   updatePlayerLineup,
@@ -34,10 +36,12 @@ interface GameStore {
   setLineup: (lineup: Lineup) => void;
   advance: () => void;
   commitRound: (playerResult: MatchResult) => void;
+  commitPlayoff: (playerResult: MatchResult) => void;
   nextSeason: (chosenTeamId: string) => void;
   investPD: (playerId: string, fundamental: Fundamental) => void;
   startTraining: (playerId: string, fundamental: Fundamental) => void;
   cancelTraining: () => void;
+  recyclePlayer: (playerId: string) => void;
   saveNow: () => Promise<void>;
 
   playerTeamName: () => string;
@@ -94,6 +98,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
     persist(get().slot, next);
   },
 
+  commitPlayoff: (playerResult) => {
+    const { state } = get();
+    if (!state) return;
+    const next = commitPlayoffGame(state, playerResult);
+    set({ state: next });
+    persist(get().slot, next);
+  },
+
   nextSeason: (chosenTeamId) => {
     const { state } = get();
     if (!state) return;
@@ -122,6 +134,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const { state } = get();
     if (!state) return;
     const next = cancelTraining(state);
+    set({ state: next });
+    persist(get().slot, next);
+  },
+
+  recyclePlayer: (playerId) => {
+    const { state } = get();
+    if (!state) return;
+    const next = recyclePlayer(state, playerId);
     set({ state: next });
     persist(get().slot, next);
   },

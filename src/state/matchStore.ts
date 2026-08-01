@@ -14,8 +14,12 @@ import {
 import { substitute } from "@domain/lineup";
 import type { MatchResult, Team } from "@domain/types";
 
+export type MatchContext = "league" | "playoff";
+
 interface MatchStore {
   live: LiveMatchState | null;
+  /** contexto da partida corrente (define como o resultado é confirmado). */
+  context: MatchContext;
   /** substituições restantes no intervalo atual. */
   subsLeft: number;
 
@@ -25,6 +29,7 @@ interface MatchStore {
     opponent: Team,
     playerIsHome: boolean,
     baseSeed: number,
+    context: MatchContext,
   ) => void;
   playSet: () => void;
   makeSub: (outId: string, inId: string) => void;
@@ -35,11 +40,13 @@ interface MatchStore {
 
 export const useMatchStore = create<MatchStore>((set, get) => ({
   live: null,
+  context: "league",
   subsLeft: MAX_SUBS_PER_BREAK,
 
-  begin: (category, playerTeam, opponent, playerIsHome, baseSeed) => {
+  begin: (category, playerTeam, opponent, playerIsHome, baseSeed, context) => {
     set({
       live: createLiveMatch(category, playerTeam, opponent, playerIsHome, baseSeed),
+      context,
       subsLeft: MAX_SUBS_PER_BREAK,
     });
   },

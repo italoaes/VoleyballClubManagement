@@ -12,6 +12,7 @@ import { effectiveForces, type Forces } from "@engine/forces";
 import { simulateSet, type EngineSetResult } from "@engine/match";
 import { Rng } from "@engine/rng";
 import type { Category, MatchResult, SetResult, Team } from "./types";
+import { pickMatchMvp } from "./mvp";
 
 export const MAX_SUBS_PER_BREAK = 2;
 
@@ -155,7 +156,10 @@ export function toMatchResult(state: LiveMatchState): MatchResult {
   const totalPointsHome = sets.reduce((a, s) => a + s.pointsHome, 0);
   const totalPointsAway = sets.reduce((a, s) => a + s.pointsAway, 0);
 
-  return {
+  const home = state.playerIsHome ? state.playerTeam : state.opponent;
+  const away = state.playerIsHome ? state.opponent : state.playerTeam;
+
+  const base: MatchResult = {
     homeId,
     awayId,
     sets,
@@ -166,7 +170,9 @@ export function toMatchResult(state: LiveMatchState): MatchResult {
     wentToTiebreak: sets.length === 5,
     totalPointsHome,
     totalPointsAway,
+    mvpId: null,
   };
+  return { ...base, mvpId: pickMatchMvp(home, away, base) };
 }
 
 void opponentForces;

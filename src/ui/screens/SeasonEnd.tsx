@@ -17,6 +17,13 @@ export function SeasonEnd(): JSX.Element {
   const record = state.history[state.history.length - 1];
   const titles = state.history.filter((h) => h.playerWasChampion).length;
 
+  // MVP do campeonato (jogador-estrela reinante) e o time onde ele está
+  const mvpTeam = state.reigningMvpId
+    ? state.teams.find((t) => t.roster.players.some((p) => p.id === state.reigningMvpId))
+    : undefined;
+  const mvpPlayer = mvpTeam?.roster.players.find((p) => p.id === state.reigningMvpId);
+  const mvpTeamName = mvpTeam?.name ?? "";
+
   return (
     <div>
       <ScreenHeader title={"Fim da temporada " + seasonLabel(state.season)} />
@@ -30,6 +37,16 @@ export function SeasonEnd(): JSX.Element {
           <p style={{ color: "var(--text-dim)", fontSize: "0.8rem" }}>CAMPEAO</p>
           <h2 style={{ color: "var(--accent)", margin: "0.25rem 0" }}>{champion?.name ?? "-"}</h2>
         </Card>
+
+        {mvpPlayer ? (
+          <Card style={{ textAlign: "center" }}>
+            <p style={{ color: "var(--text-dim)", fontSize: "0.8rem" }}>⭐ MVP DO CAMPEONATO</p>
+            <strong style={{ fontSize: "1.05rem" }}>{mvpPlayer.name}</strong>
+            <p style={{ color: "var(--text-dim)", fontSize: "0.75rem", marginTop: 4 }}>
+              {mvpTeamName}
+            </p>
+          </Card>
+        ) : null}
 
         {record ? (
           <Card style={{ textAlign: "center" }}>

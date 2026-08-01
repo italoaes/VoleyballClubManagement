@@ -9,6 +9,7 @@ import { simulateMatch } from "@engine/match";
 import { Rng } from "@engine/rng";
 import type { Category, MatchResult, SetResult, Team } from "./types";
 import { courtAverages } from "./lineup";
+import { pickMatchMvp } from "./mvp";
 
 /** Config do motor para uma categoria, com vantagem de casa habilitada (~2%). */
 export function matchConfig(category: Category): EngineConfig {
@@ -44,7 +45,7 @@ export function playMatch(
   const winnerId = r.winner === "home" ? home.id : away.id;
   const loserId = r.winner === "home" ? away.id : home.id;
 
-  return {
+  const base: MatchResult = {
     homeId: home.id,
     awayId: away.id,
     sets,
@@ -55,5 +56,9 @@ export function playMatch(
     wentToTiebreak: r.wentToTiebreak,
     totalPointsHome: r.totalPointsHome,
     totalPointsAway: r.totalPointsAway,
+    mvpId: null,
   };
+  // MVP calculado aqui (funil único das partidas auto-simuladas), para valer em
+  // TODAS as equipes. O motor permanece cego (heurística sobre a escalação).
+  return { ...base, mvpId: pickMatchMvp(home, away, base) };
 }

@@ -106,7 +106,9 @@ function SubPanel({ onDone }: { onDone: () => void }): JSX.Element {
 
 export function LiveMatch(): JSX.Element {
   const commitRound = useGameStore((s) => s.commitRound);
+  const commitPlayoff = useGameStore((s) => s.commitPlayoff);
   const live = useMatchStore((s) => s.live);
+  const context = useMatchStore((s) => s.context);
   const playSet = useMatchStore((s) => s.playSet);
   const result = useMatchStore((s) => s.result);
   const clear = useMatchStore((s) => s.clear);
@@ -131,14 +133,34 @@ export function LiveMatch(): JSX.Element {
   const playerTeam = live.playerTeam;
   const opp = live.opponent;
 
+  // melhor da partida (quando finalizada)
+  let mvpName: string | null = null;
+  let mvpTeamShort: string | null = null;
+  if (live.finished) {
+    const r = result();
+    if (r?.mvpId) {
+      const inPlayer = playerTeam.roster.players.find((p) => p.id === r.mvpId);
+      const inOpp = opp.roster.players.find((p) => p.id === r.mvpId);
+      const found = inPlayer ?? inOpp;
+      if (found) {
+        mvpName = found.name;
+        mvpTeamShort = inPlayer ? playerTeam.shortName : opp.shortName;
+      }
+    }
+  }
+
   const finish = (): void => {
     const r = result();
     if (r) {
-      commitRound(r);
-      clear();
-      const after = useGameStore.getState().state!;
-      if (after.phase === "playoffs") go("standings");
-      else go("standings");
+      if (context === "playoff") {
+        commitPlayoff(r);
+        clear();
+        go("playoffs");
+      } else {
+        commitRound(r);
+        clear();
+        go("standings");
+      }
     }
   };
 
@@ -205,9 +227,20 @@ export function LiveMatch(): JSX.Element {
             </div>
           )
         ) : (
-          <Button onClick={finish} style={{ marginTop: 12 }}>
-            {live.setsPlayer > live.setsOpponent ? "Vitória! Ver classificação" : "Ver classificação"}
-          </Button>
+          <>
+            {mvpName ? (
+              <Card style={{ marginTop: 12, textAlign: "center" }}>
+                <p style={{ color: "var(--text-dim)", fontSize: "0.75rem" }}>⭐ MELHOR DA PARTIDA</p>
+                <strong style={{ fontSize: "1.05rem" }}>{mvpName}</strong>
+                {mvpTeamShort ? (
+                  <span style={{ color: "var(--text-dim)", fontSize: "0.78rem" }}> · {mvpTeamShort}</span>
+                ) : null}
+              </Card>
+            ) : null}
+            <Button onClick={finish} style={{ marginTop: 12 }}>
+              {live.setsPlayer > live.setsOpponent ? "Vitória!" : "Continuar"}
+            </Button>
+          </>
         )}
       </div>
     </div>

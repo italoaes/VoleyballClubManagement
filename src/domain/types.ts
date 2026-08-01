@@ -50,6 +50,16 @@ export interface Player {
   number: number;
   /** minutos/sets jogados na temporada (métrica de participação p/ evolução). */
   setsPlayed: number;
+  /**
+   * true apenas para o MVP do campeonato REINANTE (o mais recente). No máximo 1
+   * jogador com isStar=true no mundo (ver GameState.reigningMvpId). Dá +2 ao time
+   * em quadra e uma estrela no plantel.
+   */
+  isStar: boolean;
+  /** nº de vezes que foi o melhor da partida NESTA temporada (zera a cada temporada). */
+  seasonMvpCount: number;
+  /** nº de vezes que foi o melhor da partida na CARREIRA inteira (nunca zera). */
+  careerMvpCount: number;
 }
 
 /**
@@ -117,6 +127,8 @@ export interface MatchResult {
   wentToTiebreak: boolean;
   totalPointsHome: number;
   totalPointsAway: number;
+  /** id do jogador eleito MVP da partida (heurística); null em jogos antigos. */
+  mvpId: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -242,8 +254,15 @@ export interface Development {
   training: TrainingFocus | null;
 }
 
+/** Contexto de um jogo de playoff do jogador aguardando ser disputado ao vivo. */
+export interface PendingPlayoffGame {
+  tieId: string;
+  gameIndex: number;
+  playerIsHome: boolean;
+}
+
 /** Schema do save; incrementado a cada mudança estrutural (migração). */
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 8;
 
 /**
  * Estado do jogo — FONTE ÚNICA DE VERDADE, 100% serializável.
@@ -277,4 +296,14 @@ export interface GameState {
   offers: JobOffer[] | null;
   /** desenvolvimento do elenco do jogador (PD + treino ativo). */
   development: Development;
+
+  // --- MVP (ponto 6) ---
+  /** id do jogador-estrela reinante (MVP do campeonato mais recente) ou null. */
+  reigningMvpId: string | null;
+  /** contagem de MVPs de partida na temporada corrente (playerId -> nº). */
+  seasonMvpTally: Record<string, number>;
+
+  // --- Playoff ao vivo (ponto 5) ---
+  /** jogo de playoff do jogador aguardando disputa ao vivo, ou null. */
+  pendingPlayoffGame: PendingPlayoffGame | null;
 }

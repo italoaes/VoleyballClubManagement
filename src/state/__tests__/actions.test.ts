@@ -1,5 +1,15 @@
 import { describe, it, expect } from "vitest";
-import { newGame, updatePlayerLineup, advance, startNextSeason } from "../actions";
+import {
+  newGame,
+  updatePlayerLineup,
+  advance,
+  startNextSeason,
+  recyclePlayer,
+  commitPlayoffGame,
+} from "../actions";
+import { pendingPlayoffMatchup } from "@domain/selectors";
+import { simulateFullMatch } from "@domain/liveMatch";
+import { validateLineup } from "@domain/lineup";
 import type { GameState } from "@domain/types";
 import { migrate, SaveVersionError } from "@persistence/migrations";
 import { SCHEMA_VERSION } from "@domain/types";
@@ -12,6 +22,30 @@ function freshGame(): GameState {
     managerAvatar: "/assets/avatars/male-1.png",
     playerTeamIndex: 11,
   });
+}
+
+/** Avança a temporada até o fim, resolvendo (simulando) os jogos do jogador no playoff. */
+function playToEnd(start: GameState): GameState {
+  let s = start;
+  let guard = 0;
+  while (s.phase !== "finished" && guard < 2000) {
+    guard++;
+    if (s.pendingPlayoffGame) {
+      const m = pendingPlayoffMatchup(s)!;
+      const playerTeam = s.teams.find((t) => t.id === s.playerTeamId)!;
+      const result = simulateFullMatch(
+        s.category,
+        playerTeam,
+        m.opponent,
+        m.playerIsHome,
+        m.baseSeed,
+      );
+      s = commitPlayoffGame(s, result);
+    } else {
+      s = advance(s);
+    }
+  }
+  return s;
 }
 
 describe("actions: novo jogo", () => {
@@ -46,6 +80,59 @@ describe("actions: escalação", () => {
   });
 });
 
+describe("actions: reciclar veterano (ponto 2)", () => {
+  it("recicla um jogador escalado preservando id/posição/número e mantém escalação válida", () => {
+    const s = freshGame();
+    const team = s.teams.find((t) => t.id === s.playerTeamId)!;
+    // pega um jogador titular e força idade 35 (veterano)
+    const targetId = team.roster.lineup.setter;
+    const withVet: GameState = {
+      ...s,
+      teams: s.teams.map((t) =>
+        t.id === team.id
+          ? {
+              ...t,
+              roster: {
+                ...t.roster,
+                players: t.roster.players.map((p) =>
+                  p.id === targetId ? { ...p, age: 35 } : p,
+                ),
+              },
+            }
+          : t,
+      ),
+    };
+
+    const before = withVet.teams
+      .find((t) => t.id === team.id)!
+      .roster.players.find((p) => p.id === targetId)!;
+
+    const next = recyclePlayer(withVet, targetId);
+    const after = next.teams
+      .find((t) => t.id === team.id)!
+      .roster.players.find((p) => p.id === targetId)!;
+
+    // id, posição e número preservados
+    expect(after.id).toBe(before.id);
+    expect(after.position).toBe(before.position);
+    expect(after.number).toBe(before.number);
+    // virou jovem
+    expect(after.age).toBeGreaterThanOrEqual(17);
+    expect(after.age).toBeLessThanOrEqual(18);
+    // escalação continua válida (não quebrou)
+    const roster = next.teams.find((t) => t.id === team.id)!.roster;
+    expect(() => validateLineup(roster, roster.lineup)).not.toThrow();
+  });
+
+  it("não recicla jogador jovem (< 34 anos)", () => {
+    const s = freshGame();
+    const team = s.teams.find((t) => t.id === s.playerTeamId)!;
+    const youngId = team.roster.players.find((p) => p.age < 34)!.id;
+    const next = recyclePlayer(s, youngId);
+    expect(next).toBe(s); // inalterado
+  });
+});
+
 describe("actions: avançar (liga -> mata-mata -> fim)", () => {
   it("simula a liga inteira e transiciona para o mata-mata", () => {
     let s = freshGame();
@@ -64,16 +151,41 @@ describe("actions: avançar (liga -> mata-mata -> fim)", () => {
     let s = freshGame();
     for (let i = 0; i < 22; i++) s = advance(s);
     expect(s.phase).toBe("playoffs");
-    // avança jogo a jogo até terminar (guard contra loop infinito)
-    let guard = 0;
-    while (s.phase !== "finished" && guard < 100) {
-      s = advance(s);
-      guard++;
-    }
+    // avança jogo a jogo até terminar (resolvendo os jogos do jogador)
+    s = playToEnd(s);
     expect(s.phase).toBe("finished");
     expect(s.playoffs!.semis).toHaveLength(2);
     expect(s.playoffs!.final).not.toBeNull();
     expect(s.playoffs!.championId).not.toBeNull();
+  });
+
+  it("playoff pausa no jogo do jogador quando ele se classifica", () => {
+    // usa o time mais forte (índice 0) para garantir classificação ao top 8
+    let s = newGame({
+      seed: 3,
+      category: "male",
+      managerName: "G",
+      managerAvatar: "/assets/avatars/male-1.png",
+      playerTeamIndex: 0,
+    });
+    while (s.phase === "league") s = advance(s);
+    expect(s.phase).toBe("playoffs");
+    // o time forte deve estar no top 8; ao avançar, deve pausar no jogo dele
+    let guard = 0;
+    let pausedForPlayer = false;
+    while (s.phase === "playoffs" && guard < 200) {
+      guard++;
+      if (s.pendingPlayoffGame) {
+        pausedForPlayer = true;
+        const m = pendingPlayoffMatchup(s)!;
+        const playerTeam = s.teams.find((t) => t.id === s.playerTeamId)!;
+        const result = simulateFullMatch(s.category, playerTeam, m.opponent, m.playerIsHome, m.baseSeed);
+        s = commitPlayoffGame(s, result);
+      } else {
+        s = advance(s);
+      }
+    }
+    expect(pausedForPlayer).toBe(true);
   });
 
   it("é reprodutível: mesma seed => mesmo campeão", () => {
@@ -85,7 +197,7 @@ describe("actions: avançar (liga -> mata-mata -> fim)", () => {
         managerAvatar: "/assets/avatars/male-1.png",
         playerTeamIndex: 0,
       });
-      while (s.phase !== "finished") s = advance(s);
+      s = playToEnd(s);
       return s.playoffs!.championId!;
     };
     expect(run()).toBe(run());
@@ -95,7 +207,7 @@ describe("actions: avançar (liga -> mata-mata -> fim)", () => {
 describe("actions: múltiplas temporadas e carreira", () => {
   it("nova temporada renova com o mesmo time, zera liga e avança o ano", () => {
     let s = freshGame();
-    while (s.phase !== "finished") s = advance(s);
+    s = playToEnd(s);
     expect(s.history).toHaveLength(1);
     expect(s.offers).not.toBeNull();
     const teamsBefore = s.teams.map((t) => t.id);
@@ -133,7 +245,7 @@ describe("actions: múltiplas temporadas e carreira", () => {
         managerAvatar: "/assets/avatars/male-1.png",
         playerTeamIndex: 0,
       });
-      while (s.phase !== "finished") s = advance(s);
+      s = playToEnd(s);
       const rec = s.history[0]!;
       expect(rec.season).toBe(26);
       expect(rec.seasonLabel).toBe("26/27");
@@ -146,7 +258,7 @@ describe("actions: múltiplas temporadas e carreira", () => {
 
   it("carreira preserva histórico ao trocar de time", () => {
     let s = freshGame();
-    while (s.phase !== "finished") s = advance(s);
+    s = playToEnd(s);
     const otherTeam = s.teams.find((t) => t.id !== s.playerTeamId)!;
     const next = startNextSeason(s, otherTeam.id);
     expect(next.playerTeamId).toBe(otherTeam.id);
@@ -187,6 +299,28 @@ describe("persistence: migração de save", () => {
     expect(() => migrate(bogus)).toThrow(SaveVersionError);
   });
 
+  it("migra v7->v8: matchMvpCount vira careerMvpCount, seasonMvpCount começa em 0", () => {
+    const base = JSON.parse(JSON.stringify(freshGame())) as Record<string, unknown>;
+    // simula um save v7: remove os campos novos e recria o antigo com valor
+    base["schemaVersion"] = 7;
+    const teams = base["teams"] as Record<string, unknown>[];
+    const p0 = (teams[0]!["roster"] as Record<string, unknown>)["players"] as Record<
+      string,
+      unknown
+    >[];
+    for (const p of p0) {
+      delete p["seasonMvpCount"];
+      delete p["careerMvpCount"];
+      p["matchMvpCount"] = 5;
+    }
+    const migrated = migrate(base);
+    const players = migrated.teams[0]!.roster.players;
+    expect(players.every((p) => p.careerMvpCount === 5)).toBe(true);
+    expect(players.every((p) => p.seasonMvpCount === 0)).toBe(true);
+    // campo antigo removido
+    expect(players.every((p) => !("matchMvpCount" in p))).toBe(true);
+  });
+
   it("migra save v1 (courtIds) para v2 (lineup estruturado)", () => {
     const v1 = {
       schemaVersion: 1,
@@ -219,5 +353,66 @@ describe("persistence: migração de save", () => {
     expect(migrated.history).toEqual([]);
     expect(migrated.objective).toBeDefined();
     expect(migrated.offers).toBeNull();
+    // v6: campos de MVP com defaults
+    expect(migrated.reigningMvpId).toBeNull();
+    expect(migrated.seasonMvpTally).toEqual({});
+    expect(migrated.pendingPlayoffGame).toBeNull();
+    expect(migrated.teams[0]!.roster.players.every((p) => p.isStar === false)).toBe(true);
+    // v8: contadores de MVP temporada/carreira
+    expect(
+      migrated.teams[0]!.roster.players.every(
+        (p) => p.seasonMvpCount === 0 && p.careerMvpCount === 0,
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("MVP do campeonato: eleição e invariante da estrela", () => {
+  it("elege o mais frequente, aplica estrela única e mantém invariante", () => {
+    let s = freshGame();
+    s = playToEnd(s);
+    // ao terminar a temporada, um MVP do campeonato deve ter sido eleito
+    expect(s.reigningMvpId).not.toBeNull();
+    const stars = s.teams.flatMap((t) => t.roster.players).filter((p) => p.isStar);
+    expect(stars).toHaveLength(1);
+    expect(stars[0]!.id).toBe(s.reigningMvpId);
+  });
+
+  it("acumula MVP (temporada e carreira) ao longo da temporada", () => {
+    let s = freshGame();
+    s = playToEnd(s);
+    const players = s.teams.flatMap((t) => t.roster.players);
+    const totalSeason = players.reduce((acc, p) => acc + p.seasonMvpCount, 0);
+    const totalCareer = players.reduce((acc, p) => acc + p.careerMvpCount, 0);
+    expect(totalSeason).toBeGreaterThan(0);
+    expect(totalCareer).toBeGreaterThan(0);
+    expect(totalCareer).toBe(totalSeason); // 1ª temporada: carreira == temporada
+  });
+
+  it("MVP da temporada zera na virada, mas a carreira acumula", () => {
+    let s = freshGame();
+    s = playToEnd(s);
+    const careerBefore = s.teams
+      .flatMap((t) => t.roster.players)
+      .reduce((acc, p) => acc + p.careerMvpCount, 0);
+
+    const next = startNextSeason(s, s.playerTeamId);
+    const players = next.teams.flatMap((t) => t.roster.players);
+    const seasonAfter = players.reduce((acc, p) => acc + p.seasonMvpCount, 0);
+    const careerAfter = players.reduce((acc, p) => acc + p.careerMvpCount, 0);
+    expect(seasonAfter).toBe(0); // temporada zerada
+    expect(careerAfter).toBe(careerBefore); // carreira preservada
+  });
+
+  it("nova temporada zera o tally mas mantém a estrela reinante", () => {
+    let s = freshGame();
+    s = playToEnd(s);
+    const reigning = s.reigningMvpId;
+    const next = startNextSeason(s, s.playerTeamId);
+    expect(next.seasonMvpTally).toEqual({});
+    // a estrela continua (só muda na próxima eleição)
+    expect(next.reigningMvpId).toBe(reigning);
+    const stars = next.teams.flatMap((t) => t.roster.players).filter((p) => p.isStar);
+    expect(stars).toHaveLength(1);
   });
 });

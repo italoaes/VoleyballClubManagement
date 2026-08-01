@@ -58,6 +58,41 @@ export function resultsForRound(state: GameState, round: number): Fixture[] {
   return state.fixtures.filter((f) => f.round === round && f.result !== null);
 }
 
+/** Rodadas ainda NÃO jogadas (com ao menos um fixture pendente), em ordem. */
+export function upcomingRounds(state: GameState, limit?: number): number[] {
+  const rounds = new Set<number>();
+  for (const f of state.fixtures) {
+    if (f.result === null) rounds.add(f.round);
+  }
+  const sorted = [...rounds].sort((a, b) => a - b);
+  return limit != null ? sorted.slice(0, limit) : sorted;
+}
+
+/** Fixtures ainda não jogados de uma rodada específica (próximos adversários). */
+export function fixturesForRound(state: GameState, round: number): Fixture[] {
+  return state.fixtures.filter((f) => f.round === round && f.result === null);
+}
+
+/** Confronto de playoff do jogador aguardando disputa (opponent + mando + seed). */
+export function pendingPlayoffMatchup(state: GameState): {
+  opponent: Team;
+  playerIsHome: boolean;
+  baseSeed: number;
+} | null {
+  const pending = state.pendingPlayoffGame;
+  const bracket = state.playoffs;
+  if (!pending || !bracket) return null;
+  const allTies = [...bracket.quarters, ...bracket.semis, ...(bracket.final ? [bracket.final] : [])];
+  const tie = allTies.find((t) => t.id === pending.tieId);
+  if (!tie) return null;
+  const opponentId = tie.high.teamId === state.playerTeamId ? tie.low.teamId : tie.high.teamId;
+  const opponent = teamById(state, opponentId);
+  if (!opponent) return null;
+  // seed determinística estável para o jogo do jogador
+  const baseSeed = state.seed + pending.gameIndex * 131 + tie.id.length * 17;
+  return { opponent, playerIsHome: pending.playerIsHome, baseSeed };
+}
+
 /** Último resultado do time do jogador (para a tela de resultado). */
 export function lastPlayerResult(state: GameState): Fixture | null {
   const played = state.fixtures.filter(

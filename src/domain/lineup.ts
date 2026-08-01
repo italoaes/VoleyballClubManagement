@@ -125,7 +125,7 @@ export function courtAverages(roster: Roster): CourtAverages {
       libero.attributes.libero) /
     courtSix.length;
 
-  return {
+  const result: CourtAverages = {
     attack,
     block,
     serve,
@@ -133,6 +133,27 @@ export function courtAverages(roster: Roster): CourtAverages {
     setting,
     libero: liberoWithLibero,
   };
+
+  // Bônus do MVP-estrela em quadra (ponto 6): +2 UMA vez no agregado do time.
+  // Atacantes (ponteiro/oposto/central) => +2 ataque; levantador/líbero => +2 defesa.
+  // Não empilha: basta um estrela entre os 7 escalados.
+  const lineupPlayers = [...courtSix, libero];
+  const star = lineupPlayers.find((p) => p.isStar);
+  if (star) {
+    if (
+      star.position === Position.Outside ||
+      star.position === Position.Opposite ||
+      star.position === Position.Middle
+    ) {
+      result.attack += 2;
+    } else {
+      // levantador ou líbero reforçam a defesa (recepção + líbero/defesa)
+      result.receive += 2;
+      result.libero += 2;
+    }
+  }
+
+  return result;
 }
 
 /** Aplica uma nova escalação, validando-a antes. */

@@ -102,29 +102,29 @@ export function generateOffers(
     stars: teamStarsFromTeam(currentTeam),
   });
 
-  // "pontuação de reputação" do treinador nesta temporada (0..~5)
-  const currentStars = teamStarsFromTeam(currentTeam);
-  let reputation = 0;
-  if (wasChampion) reputation += 3;
-  if (objectiveMet) reputation += 2;
-  if (leaguePosition <= 4) reputation += 2;
-  else if (leaguePosition <= 8) reputation += 1;
-  // superar as expectativas de um time fraco vale mais
-  reputation += Math.max(0, 4 - currentStars);
+  const reputation = managerReputation({
+    currentStars: teamStarsFromTeam(currentTeam),
+    leaguePosition,
+    numTeams,
+    objectiveMet,
+    wasChampion,
+  });
 
-  // times candidatos: mais fortes que o atual, ordenados por força desc
-  const ranked = [...allTeams]
+  // Candidatos externos: cada time só chama o treinador se a reputação dele
+  // alcança o "nível de exigência" do time (proporcional à força/estrelas dele).
+  // Assim um time 5★ (vice-campeão) NUNCA contrata quem foi penúltimo com um 2★.
+  const eligible = [...allTeams]
     .filter((t) => t.id !== currentTeam.id)
     .map((t) => ({ team: t, stars: teamStarsFromTeam(t) }))
-    .filter((x) => x.stars >= currentStars) // só propostas iguais/melhores
+    .filter((x) => reputation >= requiredReputation(x.stars))
     .sort((a, b) => b.stars - a.stars);
 
   // nº de propostas externas conforme a reputação (0 a 3)
-  const numOffers = Math.max(0, Math.min(3, Math.floor(reputation / 2)));
+  const numOffers = Math.max(0, Math.min(3, Math.floor(reputation / 3)));
 
-  const pool = [...ranked];
+  const pool = [...eligible];
   for (let i = 0; i < numOffers && pool.length > 0; i++) {
-    // escolhe entre os melhores disponíveis, com leve aleatoriedade
+    // escolhe entre os melhores elegíveis, com leve aleatoriedade
     const idx = rng.integers(0, Math.min(3, pool.length));
     const picked = pool.splice(idx, 1)[0]!;
     offers.push({
@@ -138,4 +138,60 @@ export function generateOffers(
   }
 
   return offers;
+}
+
+/**
+ * Reputação do treinador na temporada (0 a ~10). Reflete DESEMPENHO real:
+ * bom resultado sobe; fracasso (parte de baixo da tabela / meta não cumprida)
+ * desce. O bônus de "superar com time fraco" SÓ conta se o objetivo foi cumprido.
+ */
+export function managerReputation(params: {
+  currentStars: number;
+  leaguePosition: number;
+  numTeams: number;
+  objectiveMet: boolean;
+  wasChampion: boolean;
+}): number {
+  const { currentStars, leaguePosition, numTeams, objectiveMet, wasChampion } = params;
+  let rep = 0;
+
+  // título e classificação
+  if (wasChampion) rep += 4;
+  if (leaguePosition <= 2) rep += 3;
+  else if (leaguePosition <= 4) rep += 2;
+  else if (leaguePosition <= 8) rep += 1;
+
+  // meta da diretoria
+  if (objectiveMet) {
+    rep += 2;
+    // superar expectativas com um time fraco (só quando cumpriu a meta)
+    rep += Math.max(0, 4 - currentStars);
+  } else {
+    rep -= 2; // não cumprir a meta é um fracasso
+  }
+
+  // parte de baixo da tabela derruba a reputação
+  const bottomTwo = leaguePosition >= numTeams - 1;
+  const bottomThird = leaguePosition > Math.ceil((numTeams * 2) / 3);
+  if (bottomTwo) rep -= 3;
+  else if (bottomThird) rep -= 1;
+
+  return Math.max(0, rep);
+}
+
+/** Reputação mínima que um time exige para convidar o treinador, por estrelas. */
+export function requiredReputation(teamStars: number): number {
+  // 5★ exige reputação alta; 3★ média; 1-2★ baixa.
+  switch (teamStars) {
+    case 5:
+      return 9;
+    case 4:
+      return 6;
+    case 3:
+      return 4;
+    case 2:
+      return 2;
+    default:
+      return 1;
+  }
 }

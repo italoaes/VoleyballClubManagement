@@ -7,7 +7,7 @@
 
 import { Rng } from "@engine/rng";
 import { matchConfig } from "@domain/matchAdapter";
-import { generateLeague, DEFAULT_GENERATE } from "@domain/generator";
+import { generateLeague, DEFAULT_GENERATE, regenerateAsYouth } from "@domain/generator";
 import {
   generateFixtures,
   playerFixtureIndex,
@@ -18,11 +18,14 @@ import { computeStandings } from "@domain/standings";
 import { setLineup } from "@domain/lineup";
 import { positionOf } from "@domain/selectors";
 import {
+  applyPlayoffGameResult,
   buildFinal,
   buildQuarters,
   buildSemis,
+  homeIsHighSeed,
   playOneGame,
   seedTop8,
+  tieHasTeam,
   tieWinnerSeeded,
 } from "@domain/playoffs";
 import {
@@ -33,10 +36,12 @@ import {
   seasonLabel,
 } from "@domain/career";
 import {
+  boostChampionMvp,
   bumpFundamental,
   canInvest,
   declineVeteran,
   growFromMinutes,
+  growPotential,
   pdCost,
   pdFromMatch,
   pdObjectiveBonus,
@@ -101,14 +106,20 @@ function applyRoundDevelopment(
     const setsAgainst = isHome ? playerResult.setsAway : playerResult.setsHome;
     const opponentId = isHome ? playerResult.awayId : playerResult.homeId;
     const opponent = state.teams.find((t) => t.id === opponentId);
-    const underdog = opponent
-      ? teamStarsFromTeam(playerTeam) < teamStarsFromTeam(opponent)
-      : false;
+    const beatSuperiorTeam =
+      playerWon && !!opponent && teamStarsFromTeam(playerTeam) < teamStarsFromTeam(opponent);
+    // virada: perdeu algum dos 2 primeiros sets e ainda venceu a partida
+    const lostEarlySet = playerResult.sets
+      .slice(0, 2)
+      .some((s) => s.winnerId !== state.playerTeamId);
+    const wasComeback = playerWon && lostEarlySet;
     points += pdFromMatch({
       playerWon,
-      wasSweep: playerWon && setsAgainst === 0 && setsFor === 3,
-      wentToTiebreak: playerResult.wentToTiebreak,
-      playerWasUnderdog: underdog,
+      setsFor,
+      setsAgainst,
+      beatSuperiorTeam,
+      wasComeback,
+      wonAway: playerWon && !isHome,
     });
   }
 
@@ -118,6 +129,66 @@ function applyRoundDevelopment(
       : t,
   );
   return { teams, development: { points, training } };
+}
+
+/** Acumula os MVPs de uma lista de resultados no tally (playerId -> nº). */
+function tallyMvps(
+  base: Record<string, number>,
+  results: (MatchResult | null | undefined)[],
+): Record<string, number> {
+  const tally = { ...base };
+  for (const r of results) {
+    if (r && r.mvpId) {
+      tally[r.mvpId] = (tally[r.mvpId] ?? 0) + 1;
+    }
+  }
+  return tally;
+}
+
+/** Incrementa o contador de carreira `matchMvpCount` dos jogadores eleitos MVP. */
+function incrementMvpCounts(
+  teams: Team[],
+  results: (MatchResult | null | undefined)[],
+): Team[] {
+  const counts = new Map<string, number>();
+  for (const r of results) {
+    if (r && r.mvpId) counts.set(r.mvpId, (counts.get(r.mvpId) ?? 0) + 1);
+  }
+  if (counts.size === 0) return teams;
+  return teams.map((t) => ({
+    ...t,
+    roster: {
+      ...t.roster,
+      players: t.roster.players.map((p) => {
+        const inc = counts.get(p.id);
+        return inc
+          ? {
+              ...p,
+              seasonMvpCount: (p.seasonMvpCount ?? 0) + inc,
+              careerMvpCount: (p.careerMvpCount ?? 0) + inc,
+            }
+          : p;
+      }),
+    },
+  }));
+}
+
+/**
+ * Define o jogador-estrela reinante (invariante: no máximo 1 isStar no mundo, e
+ * reigningMvpId bate com ele ou null). TODAS as transições de estrela passam aqui.
+ */
+export function setReigningMvp(state: GameState, playerId: string | null): GameState {
+  const teams = state.teams.map((t) => ({
+    ...t,
+    roster: {
+      ...t.roster,
+      players: t.roster.players.map((p) => {
+        const shouldStar = playerId !== null && p.id === playerId;
+        return p.isStar === shouldStar ? p : { ...p, isStar: shouldStar };
+      }),
+    },
+  }));
+  return { ...state, teams, reigningMvpId: playerId };
 }
 
 export interface NewGameOptions {
@@ -160,6 +231,9 @@ export function newGame(opts: NewGameOptions): GameState {
     history: [],
     offers: null,
     development: { points: 0, training: null },
+    reigningMvpId: null,
+    seasonMvpTally: {},
+    pendingPlayoffGame: null,
   };
 }
 
@@ -195,7 +269,15 @@ export function advanceLeagueRound(state: GameState): GameState {
   // resultado do time do jogador nesta rodada (para PD)
   const pIdx = playerFixtureIndex(state.currentRound, fixtures, state.playerTeamId);
   const playerResult = pIdx >= 0 ? fixtures[pIdx]!.result : null;
-  const { teams, development } = applyRoundDevelopment(state, playerResult);
+  const dev = applyRoundDevelopment(state, playerResult);
+  const development = dev.development;
+
+  // acumula MVPs de TODOS os jogos da rodada (tally + contador de carreira)
+  const roundResults = fixtures
+    .filter((f) => f.round === state.currentRound)
+    .map((f) => f.result);
+  const seasonMvpTally = tallyMvps(state.seasonMvpTally, roundResults);
+  const teams = incrementMvpCounts(dev.teams, roundResults);
 
   const standings = computeStandings(teams, fixtures);
   const last = totalRounds(teams.length);
@@ -205,10 +287,10 @@ export function advanceLeagueRound(state: GameState): GameState {
     // fim da liga -> monta e prepara o mata-mata
     const order = standings.map((s) => s.teamId);
     const playoffs = initPlayoffs(order);
-    return { ...state, teams, development, fixtures, standings, currentRound: last, phase: "playoffs", playoffs };
+    return { ...state, teams, development, seasonMvpTally, fixtures, standings, currentRound: last, phase: "playoffs", playoffs };
   }
 
-  return { ...state, teams, development, fixtures, standings, currentRound: nextRound };
+  return { ...state, teams, development, seasonMvpTally, fixtures, standings, currentRound: nextRound };
 }
 
 /**
@@ -241,7 +323,14 @@ export function commitPlayerRound(state: GameState, playerResult: MatchResult): 
     fixtures[idx]!.result = res;
   }
 
-  const { teams, development } = applyRoundDevelopment(state, playerResult);
+  const dev = applyRoundDevelopment(state, playerResult);
+  const development = dev.development;
+
+  const roundResults = fixtures
+    .filter((f) => f.round === state.currentRound)
+    .map((f) => f.result);
+  const seasonMvpTally = tallyMvps(state.seasonMvpTally, roundResults);
+  const teams = incrementMvpCounts(dev.teams, roundResults);
 
   const standings = computeStandings(teams, fixtures);
   const last = totalRounds(teams.length);
@@ -249,9 +338,9 @@ export function commitPlayerRound(state: GameState, playerResult: MatchResult): 
   if (state.currentRound >= last) {
     const order = standings.map((s) => s.teamId);
     const playoffs = initPlayoffs(order);
-    return { ...state, teams, development, fixtures, standings, currentRound: last, phase: "playoffs", playoffs };
+    return { ...state, teams, development, seasonMvpTally, fixtures, standings, currentRound: last, phase: "playoffs", playoffs };
   }
-  return { ...state, teams, development, fixtures, standings, currentRound: state.currentRound + 1 };
+  return { ...state, teams, development, seasonMvpTally, fixtures, standings, currentRound: state.currentRound + 1 };
 }
 
 /** Monta o bracket inicial (quartas) sem resolver ainda. */
@@ -273,48 +362,130 @@ export function initPlayoffs(standingsOrder: string[]): PlayoffBracket {
  */
 export function advancePlayoffStage(state: GameState): GameState {
   if (state.phase !== "playoffs" || !state.playoffs) return state;
+  // se há um jogo do jogador aguardando, não avança (a UI precisa resolvê-lo antes)
+  if (state.pendingPlayoffGame) return state;
 
   const cfg = matchConfig(state.category);
   const byId = teamsById(state.teams);
   const bracket = state.playoffs;
+  const newResults: MatchResult[] = [];
+  const playerId = state.playerTeamId;
 
-  // Joga um jogo em cada tie pendente de um conjunto (avanço paralelo).
+  // Detecta um tie pendente do jogador na fase. Se houver, pausa (pendingPlayoffGame).
+  const pauseIfPlayerTie = (ties: PlayoffTie[]): GameState | null => {
+    const tie = ties.find((t) => t.winnerId === null && tieHasTeam(t, playerId));
+    if (!tie) return null;
+    const gameIndex = tie.games.length;
+    const highHosts = homeIsHighSeed(tie.bestOf, gameIndex);
+    const playerIsHigh = tie.high.teamId === playerId;
+    const playerIsHome = playerIsHigh ? highHosts : !highHosts;
+    return {
+      ...state,
+      pendingPlayoffGame: { tieId: tie.id, gameIndex, playerIsHome },
+    };
+  };
+
+  // Joga um jogo em cada tie pendente do conjunto, PULANDO o tie do jogador.
   const playRoundOfTies = (ties: PlayoffTie[], salt: number): PlayoffTie[] =>
     ties.map((tie, i) => {
-      if (tie.winnerId) return tie; // já decidido: não joga mais
+      if (tie.winnerId || tieHasTeam(tie, playerId)) return tie; // decidido ou é do jogador
       const rng = new Rng(state.seed).spawn(salt + i * 100 + tie.games.length);
-      return playOneGame(tie, byId, cfg, rng);
+      const played = playOneGame(tie, byId, cfg, rng);
+      const last = played.games[played.games.length - 1];
+      if (last && played.games.length > tie.games.length) newResults.push(last);
+      return played;
     });
+
+  const withTally = (next: GameState): GameState => ({
+    ...next,
+    seasonMvpTally: tallyMvps(next.seasonMvpTally, newResults),
+    teams: incrementMvpCounts(next.teams, newResults),
+  });
 
   // === QUARTAS ===
   if (bracket.quarters.some((t) => t.winnerId === null)) {
+    const paused = pauseIfPlayerTie(bracket.quarters);
+    if (paused) return paused;
     const quarters = playRoundOfTies(bracket.quarters, 20000);
     const semis = quarters.every((t) => t.winnerId)
       ? buildSemis(quarters.map(tieWinnerSeeded))
       : bracket.semis;
-    return { ...state, playoffs: { ...bracket, quarters, semis } };
+    return withTally({ ...state, playoffs: { ...bracket, quarters, semis } });
   }
 
   // === SEMIS ===
   if (bracket.semis.length > 0 && bracket.semis.some((t) => t.winnerId === null)) {
+    const paused = pauseIfPlayerTie(bracket.semis);
+    if (paused) return paused;
     const semis = playRoundOfTies(bracket.semis, 30000);
     const final = semis.every((t) => t.winnerId)
       ? buildFinal(semis.map(tieWinnerSeeded))
       : bracket.final;
-    return { ...state, playoffs: { ...bracket, semis, final } };
+    return withTally({ ...state, playoffs: { ...bracket, semis, final } });
   }
 
   // === FINAL (jogo único) ===
   if (bracket.final && bracket.final.winnerId === null) {
+    const paused = pauseIfPlayerTie([bracket.final]);
+    if (paused) return paused;
     const rng = new Rng(state.seed).spawn(40000);
     const final = playOneGame(bracket.final, byId, cfg, rng);
+    const last = final.games[final.games.length - 1];
+    if (last) newResults.push(last);
+    const tallied = withTally(state);
     if (final.winnerId) {
-      return finishSeason(state, { ...bracket, final, championId: final.winnerId });
+      return finishSeason(tallied, { ...bracket, final, championId: final.winnerId });
     }
-    return { ...state, playoffs: { ...bracket, final } };
+    return withTally({ ...state, playoffs: { ...bracket, final } });
   }
 
   return state;
+}
+
+/**
+ * Aplica o resultado (ao vivo ou simulado) do jogo de playoff do jogador ao tie
+ * pendente, atualiza o bracket, contabiliza o MVP, limpa `pendingPlayoffGame` e
+ * então continua o avanço dos demais jogos da rodada (auto-simulados).
+ */
+export function commitPlayoffGame(state: GameState, result: MatchResult): GameState {
+  if (state.phase !== "playoffs" || !state.playoffs || !state.pendingPlayoffGame) return state;
+  const bracket = state.playoffs;
+  const { tieId } = state.pendingPlayoffGame;
+
+  const applyToList = (ties: PlayoffTie[]): PlayoffTie[] =>
+    ties.map((t) => (t.id === tieId ? applyPlayoffGameResult(t, result) : t));
+
+  let next = state;
+  const seasonMvpTally = tallyMvps(state.seasonMvpTally, [result]);
+  const teams = incrementMvpCounts(state.teams, [result]);
+
+  // localiza a fase do tie e reconstrói o bracket se a fase encerrar
+  if (bracket.quarters.some((t) => t.id === tieId)) {
+    const quarters = applyToList(bracket.quarters);
+    const semis = quarters.every((t) => t.winnerId)
+      ? buildSemis(quarters.map(tieWinnerSeeded))
+      : bracket.semis;
+    next = { ...state, teams, playoffs: { ...bracket, quarters, semis }, seasonMvpTally, pendingPlayoffGame: null };
+  } else if (bracket.semis.some((t) => t.id === tieId)) {
+    const semis = applyToList(bracket.semis);
+    const final = semis.every((t) => t.winnerId)
+      ? buildFinal(semis.map(tieWinnerSeeded))
+      : bracket.final;
+    next = { ...state, teams, playoffs: { ...bracket, semis, final }, seasonMvpTally, pendingPlayoffGame: null };
+  } else if (bracket.final && bracket.final.id === tieId) {
+    const final = applyPlayoffGameResult(bracket.final, result);
+    const tallied: GameState = { ...state, teams, seasonMvpTally, pendingPlayoffGame: null };
+    if (final.winnerId) {
+      return finishSeason(tallied, { ...bracket, final, championId: final.winnerId });
+    }
+    next = { ...tallied, playoffs: { ...bracket, final } };
+  } else {
+    // tie não encontrado: apenas limpa o pendente
+    return { ...state, pendingPlayoffGame: null };
+  }
+
+  // continua o avanço para resolver os demais jogos da rodada (sem o jogador)
+  return advancePlayoffStage(next);
 }
 
 /** Conclui a temporada: registra histórico (com objetivo) e gera propostas. */
@@ -357,7 +528,8 @@ function finishSeason(state: GameState, bracket: PlayoffBracket): GameState {
     points: state.development.points + bonus,
   };
 
-  return {
+  // === MVP do campeonato: elege o mais frequente no tally, aplica boost e estrela ===
+  let stateWithMvp: GameState = {
     ...state,
     phase: "finished",
     playoffs: bracket,
@@ -365,6 +537,33 @@ function finishSeason(state: GameState, bracket: PlayoffBracket): GameState {
     offers,
     development,
   };
+  const mvpId = electChampionMvp(state.seasonMvpTally);
+  if (mvpId) {
+    // aplica o boost permanente ao jogador, onde quer que ele esteja
+    const teams = stateWithMvp.teams.map((t) => ({
+      ...t,
+      roster: {
+        ...t.roster,
+        players: t.roster.players.map((p) => (p.id === mvpId ? boostChampionMvp(p) : p)),
+      },
+    }));
+    stateWithMvp = setReigningMvp({ ...stateWithMvp, teams }, mvpId);
+  }
+
+  return stateWithMvp;
+}
+
+/** Elege o MVP do campeonato = maior contagem no tally (desempate estável por id). */
+function electChampionMvp(tally: Record<string, number>): string | null {
+  let best: string | null = null;
+  let bestCount = 0;
+  for (const [id, count] of Object.entries(tally)) {
+    if (count > bestCount || (count === bestCount && best !== null && id < best)) {
+      best = id;
+      bestCount = count;
+    }
+  }
+  return best;
 }
 
 /**
@@ -381,10 +580,13 @@ export function startNextSeason(state: GameState, chosenTeamId: string): GameSta
   // novo time controlado pelo jogador. Envelhece +1 ano, aplica declínio de
   // veteranos e zera os sets jogados na temporada.
   const declineRng = new Rng(nextSeasonSeed).spawn(777);
+  const growRng = new Rng(nextSeasonSeed).spawn(778);
   const teams = state.teams.map((t) => {
     const players = t.roster.players.map((p) => {
-      const aged: Player = { ...p, age: p.age + 1, setsPlayed: 0 };
-      return declineVeteran(aged, declineRng);
+      const aged: Player = { ...p, age: p.age + 1, setsPlayed: 0, seasonMvpCount: 0 };
+      // jovens ganham margem de potencial; veteranos declinam
+      const grown = growPotential(aged, growRng);
+      return declineVeteran(grown, declineRng);
     });
     return {
       ...t,
@@ -410,6 +612,8 @@ export function startNextSeason(state: GameState, chosenTeamId: string): GameSta
     season: nextYear,
     objective: objectiveForTeam(playerTeam, teams.length),
     offers: null,
+    seasonMvpTally: {},
+    pendingPlayoffGame: null,
   };
 }
 
@@ -478,4 +682,59 @@ export function startTraining(
 /** Cancela o treino ativo. */
 export function cancelTraining(state: GameState): GameState {
   return { ...state, development: { ...state.development, training: null } };
+}
+
+/** Idade mínima para poder aposentar/reciclar um veterano. */
+export const RETIRE_MIN_AGE = 34;
+
+/**
+ * "Aposentar" um veterano do elenco do jogador: reescreve-o como um jovem da base
+ * (ponto 2), preservando id/posição/número (não quebra a escalação). Só permitido
+ * para jogadores com idade >= RETIRE_MIN_AGE do time do jogador.
+ */
+export function recyclePlayer(state: GameState, playerId: string): GameState {
+  const team = state.teams.find((t) => t.id === state.playerTeamId);
+  if (!team) return state;
+  const player = team.roster.players.find((p) => p.id === playerId);
+  if (!player || player.age < RETIRE_MIN_AGE) return state;
+
+  // nomes já em uso (todos os times) para evitar duplicatas
+  const usedNames = new Set<string>();
+  for (const t of state.teams) {
+    for (const p of t.roster.players) usedNames.add(p.name);
+  }
+
+  const rng = new Rng(state.seed).spawn(60000 + hashId(playerId));
+  const renewed = regenerateAsYouth(player, rng, usedNames, state.category);
+
+  const players = team.roster.players.map((p) => (p.id === playerId ? renewed : p));
+  const teams = state.teams.map((t) =>
+    t.id === team.id ? { ...t, roster: { ...t.roster, players } } : t,
+  );
+
+  // se o jogador estava em treino, cancela (o treino perdeu sentido)
+  const training =
+    state.development.training?.playerId === playerId ? null : state.development.training;
+
+  let next: GameState = {
+    ...state,
+    teams,
+    development: { ...state.development, training },
+  };
+
+  // se era o astro reinante, perde a estrela (mantém invariante)
+  if (state.reigningMvpId === playerId) {
+    next = setReigningMvp(next, null);
+  }
+
+  return next;
+}
+
+/** Hash estável de um id de jogador para derivar um sub-stream de RNG. */
+function hashId(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) {
+    h = (Math.imul(h, 31) + id.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h) % 100000;
 }

@@ -161,22 +161,32 @@ export function tickTraining(
 
 /**
  * Canal 2 (fonte) — PD ganhos por MARCOS numa partida do time do jogador.
- * Vitória vale mais; 3-0 e superar um favorito rendem bônus. Derrota rende pouco.
+ *
+ * Tabela oficial:
+ *  - Vitória 3-0 = 5 PD; 3-1 = 3 PD; 3-2 = 2 PD.
+ *  - Derrota (qualquer placar) = 1 PD.
+ *  - Bônus (somados): +1 vencer time superior; +1 virada no jogo; +1 vitória fora de casa.
  */
 export function pdFromMatch(params: {
   playerWon: boolean;
-  wasSweep: boolean; // venceu 3-0
-  wentToTiebreak: boolean;
-  playerWasUnderdog: boolean; // era o mais fraco no confronto
+  setsFor: number; // sets ganhos pelo time do jogador
+  setsAgainst: number; // sets perdidos pelo time do jogador
+  beatSuperiorTeam: boolean; // adversário era mais forte (mais estrelas)
+  wasComeback: boolean; // perdeu algum dos 2 primeiros sets e venceu
+  wonAway: boolean; // venceu jogando fora de casa
 }): number {
-  let pd = 0;
-  if (params.playerWon) {
-    pd += 2;
-    if (params.wasSweep) pd += 1;
-    if (params.playerWasUnderdog) pd += 2; // zebra a favor rende mais
-  } else {
-    pd += params.wentToTiebreak ? 1 : 0; // levou o favorito ao limite
+  if (!params.playerWon) {
+    return 1; // derrota rende 1 PD, qualquer placar
   }
+  // base por placar de sets
+  let pd: number;
+  if (params.setsAgainst === 0) pd = 5; // 3-0
+  else if (params.setsAgainst === 1) pd = 3; // 3-1
+  else pd = 2; // 3-2
+  // bônus
+  if (params.beatSuperiorTeam) pd += 1;
+  if (params.wasComeback) pd += 1;
+  if (params.wonAway) pd += 1;
   return pd;
 }
 
@@ -186,6 +196,47 @@ export function pdObjectiveBonus(objectiveMet: boolean, wasChampion: boolean): n
   if (objectiveMet) pd += 8;
   if (wasChampion) pd += 6;
   return pd;
+}
+
+/** Teto absoluto de potencial (anti-inflação em muitas temporadas). */
+export const POTENTIAL_CAP = 93;
+
+/** Teto do overall via boost de MVP do campeonato (anti-inflação). */
+export const MVP_BOOST_CAP = 95;
+
+/**
+ * Boost permanente do MVP do campeonato (ponto 6): sobe alguns fundamentos e o
+ * potencial junto (senão um MVP no teto não ganharia nada), com cap MVP_BOOST_CAP.
+ * Aplicado uma vez ao ser eleito.
+ */
+export function boostChampionMvp(p: Player): Player {
+  // eleva o potencial primeiro (permite o overall subir), com cap
+  const potential = clamp(Math.max(p.potential, playerOverall(p)) + 2, ATTR_MIN, MVP_BOOST_CAP);
+  // sobe os 3 fundamentos mais altos em +1 (assinatura do craque), respeitando o cap
+  const attrs = { ...p.attributes };
+  const order = [...FUNDAMENTALS].sort((a, b) => attrs[b] - attrs[a]);
+  let boosted = { ...p, potential };
+  for (let i = 0; i < 3; i++) {
+    const f = order[i]!;
+    if (attrs[f] < MVP_BOOST_CAP && overall(boosted.attributes) < potential) {
+      boosted = bumpFundamental(boosted, f, 1);
+    }
+  }
+  return boosted;
+}
+
+/**
+ * Crescimento de POTENCIAL entre temporadas (ponto 1): jogadores jovens ganham
+ * um pouco de margem a cada virada, para não estagnarem ao atingir o teto.
+ * Incremento decresce com a idade e zera aos 28+. Cap absoluto POTENTIAL_CAP.
+ */
+export function growPotential(p: Player, rng: Rng): Player {
+  let inc = 0;
+  if (p.age <= 21) inc = 2 + rng.integers(0, 2); // +2..+3
+  else if (p.age <= 27) inc = 1 + rng.integers(0, 2); // +1..+2
+  else return p; // 28+ não ganha margem
+  const potential = clamp(p.potential + inc, ATTR_MIN, POTENTIAL_CAP);
+  return { ...p, potential };
 }
 
 /**

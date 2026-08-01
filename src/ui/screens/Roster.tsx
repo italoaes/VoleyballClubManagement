@@ -71,9 +71,22 @@ function PotentialBar({ current, potential }: { current: number; potential: numb
   );
 }
 
-function PlayerRow({ player, expanded, onToggle }: { player: Player; expanded: boolean; onToggle: () => void }): JSX.Element {
+const RETIRE_AGE = 34;
+
+function PlayerRow({
+  player,
+  expanded,
+  onToggle,
+  onRetire,
+}: {
+  player: Player;
+  expanded: boolean;
+  onToggle: () => void;
+  onRetire: (playerId: string) => void;
+}): JSX.Element {
   const ovr = playerOverall(player);
   const canGrow = ovr < player.potential;
+  const canRetire = player.age >= RETIRE_AGE;
   return (
     <Card style={{ marginBottom: 6 }} onClick={onToggle}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
@@ -96,9 +109,15 @@ function PlayerRow({ player, expanded, onToggle }: { player: Player; expanded: b
 
         {/* nome + idade + barra */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 700, fontSize: "0.9rem" }}>{player.name}</div>
+          <div style={{ fontWeight: 700, fontSize: "0.9rem" }}>
+            {player.isStar ? <span title="MVP do campeonato">⭐ </span> : null}
+            {player.name}
+          </div>
           <div style={{ fontSize: "0.72rem", color: "var(--text-dim)" }}>
             {player.age} anos{canGrow ? " · em evolução" : ""}
+            {player.careerMvpCount > 0
+              ? ` · ⭐ ${player.seasonMvpCount} na temporada · ${player.careerMvpCount} na carreira`
+              : ""}
           </div>
           <PotentialBar current={ovr} potential={player.potential} />
         </div>
@@ -118,16 +137,46 @@ function PlayerRow({ player, expanded, onToggle }: { player: Player; expanded: b
       </div>
 
       {expanded ? (
-        <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap", justifyContent: "space-between" }}>
-          {FUNDAMENTALS.map((f) => (
-            <div key={f.key} style={{ textAlign: "center", minWidth: 42 }}>
-              <div style={{ fontSize: "0.62rem", color: "var(--text-dim)" }}>{f.label}</div>
-              <div style={{ fontWeight: 800, color: ovrColor(player.attributes[f.key]) }}>
-                {player.attributes[f.key]}
+        <>
+          <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap", justifyContent: "space-between" }}>
+            {FUNDAMENTALS.map((f) => (
+              <div key={f.key} style={{ textAlign: "center", minWidth: 42 }}>
+                <div style={{ fontSize: "0.62rem", color: "var(--text-dim)" }}>{f.label}</div>
+                <div style={{ fontWeight: 800, color: ovrColor(player.attributes[f.key]) }}>
+                  {player.attributes[f.key]}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+          {canRetire ? (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (
+                  window.confirm(
+                    `Aposentar ${player.name}? Ele será substituído por um jovem da base (ação irreversível).`,
+                  )
+                ) {
+                  onRetire(player.id);
+                }
+              }}
+              style={{
+                marginTop: 10,
+                width: "100%",
+                padding: "0.5rem",
+                borderRadius: 8,
+                border: "1px solid var(--danger)",
+                background: "transparent",
+                color: "var(--danger)",
+                fontWeight: 700,
+                cursor: "pointer",
+                fontSize: "0.82rem",
+              }}
+            >
+              Aposentar (renovar da base)
+            </button>
+          ) : null}
+        </>
       ) : null}
     </Card>
   );
@@ -135,6 +184,7 @@ function PlayerRow({ player, expanded, onToggle }: { player: Player; expanded: b
 
 export function Roster(): JSX.Element {
   const state = useGameStore((s) => s.state);
+  const retirePlayer = useGameStore((s) => s.recyclePlayer);
   const go = useNavStore((s) => s.go);
   const [expanded, setExpanded] = useState<string | null>(null);
 
@@ -154,6 +204,7 @@ export function Roster(): JSX.Element {
             player={p}
             expanded={expanded === p.id}
             onToggle={() => setExpanded(expanded === p.id ? null : p.id)}
+            onRetire={retirePlayer}
           />
         ))}
 

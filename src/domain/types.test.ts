@@ -28,6 +28,9 @@ describe("domain/types (smoke)", () => {
       growthProgress: 0,
       number: 1,
       setsPlayed: 0,
+      isStar: false,
+      seasonMvpCount: 0,
+      careerMvpCount: 0,
     };
     const state: GameState = {
       schemaVersion: SCHEMA_VERSION,
@@ -66,6 +69,9 @@ describe("domain/types (smoke)", () => {
       history: [],
       offers: null,
       development: { points: 0, training: null },
+      reigningMvpId: null,
+      seasonMvpTally: {},
+      pendingPlayoffGame: null,
     };
     const roundTrip = JSON.parse(JSON.stringify(state)) as GameState;
     expect(roundTrip).toEqual(state);

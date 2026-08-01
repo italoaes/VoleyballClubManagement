@@ -4,6 +4,8 @@ import {
   rollPotential,
   overall,
   growFromMinutes,
+  growPotential,
+  POTENTIAL_CAP,
   bumpFundamental,
   pdCost,
   canInvest,
@@ -26,6 +28,9 @@ function mkPlayer(over: number, age: number, potential: number): Player {
     growthProgress: 0,
     number: 1,
     setsPlayed: 0,
+    isStar: false,
+    seasonMvpCount: 0,
+    careerMvpCount: 0,
   };
 }
 
@@ -91,16 +96,71 @@ describe("desenvolvimento: PD e investimento", () => {
     expect(overall(bumped.attributes)).toBeLessThanOrEqual(70);
   });
 
-  it("PD por marcos: vitória e zebra rendem mais", () => {
-    const win = pdFromMatch({ playerWon: true, wasSweep: false, wentToTiebreak: false, playerWasUnderdog: false });
-    const upset = pdFromMatch({ playerWon: true, wasSweep: true, wentToTiebreak: false, playerWasUnderdog: true });
-    const loss = pdFromMatch({ playerWon: false, wasSweep: false, wentToTiebreak: false, playerWasUnderdog: false });
-    expect(upset).toBeGreaterThan(win);
-    expect(win).toBeGreaterThan(loss);
+  it("PD por marcos: tabela oficial de placar", () => {
+    const base = { beatSuperiorTeam: false, wasComeback: false, wonAway: false };
+    const win30 = pdFromMatch({ playerWon: true, setsFor: 3, setsAgainst: 0, ...base });
+    const win31 = pdFromMatch({ playerWon: true, setsFor: 3, setsAgainst: 1, ...base });
+    const win32 = pdFromMatch({ playerWon: true, setsFor: 3, setsAgainst: 2, ...base });
+    const loss = pdFromMatch({ playerWon: false, setsFor: 1, setsAgainst: 3, ...base });
+    expect(win30).toBe(5);
+    expect(win31).toBe(3);
+    expect(win32).toBe(2);
+    expect(loss).toBe(1);
+  });
+
+  it("PD por marcos: bônus somam (superior + virada + fora)", () => {
+    const plain = pdFromMatch({
+      playerWon: true, setsFor: 3, setsAgainst: 2,
+      beatSuperiorTeam: false, wasComeback: false, wonAway: false,
+    });
+    const loaded = pdFromMatch({
+      playerWon: true, setsFor: 3, setsAgainst: 2,
+      beatSuperiorTeam: true, wasComeback: true, wonAway: true,
+    });
+    expect(plain).toBe(2);
+    expect(loaded).toBe(5); // 2 + 1 + 1 + 1
+    // derrota nunca rende mais que a menor vitória
+    const loss = pdFromMatch({
+      playerWon: false, setsFor: 0, setsAgainst: 3,
+      beatSuperiorTeam: false, wasComeback: false, wonAway: false,
+    });
+    expect(loss).toBeLessThan(plain);
   });
 
   it("bônus de objetivo/título", () => {
     expect(pdObjectiveBonus(true, true)).toBeGreaterThan(pdObjectiveBonus(false, false));
+  });
+});
+
+describe("desenvolvimento: crescimento de potencial por temporada (ponto 1)", () => {
+  it("jovem ganha margem de potencial; veterano não", () => {
+    const rng = new Rng(1);
+    const young = growPotential(mkPlayer(60, 20, 66), rng);
+    const vet = growPotential(mkPlayer(80, 33, 82), rng);
+    expect(young.potential).toBeGreaterThan(66);
+    expect(vet.potential).toBe(82);
+  });
+
+  it("potencial nunca ultrapassa o cap", () => {
+    let p = mkPlayer(85, 19, POTENTIAL_CAP - 1);
+    // várias temporadas seguidas de crescimento
+    for (let s = 0; s < 20; s++) {
+      p = growPotential({ ...p }, new Rng(s));
+    }
+    expect(p.potential).toBeLessThanOrEqual(POTENTIAL_CAP);
+  });
+
+  it("anti-inflação: overall via crescimento respeita o cap ao longo de temporadas", () => {
+    // jovem que joga e ganha margem por várias temporadas nunca passa do cap
+    let p = mkPlayer(62, 19, 70);
+    for (let season = 0; season < 12; season++) {
+      // uma temporada de jogos
+      for (let r = 0; r < 25; r++) p = growFromMinutes(p, true);
+      // virada de temporada: envelhece e ganha margem
+      p = growPotential({ ...p, age: p.age + 1 }, new Rng(season));
+    }
+    expect(overall(p.attributes)).toBeLessThanOrEqual(POTENTIAL_CAP);
+    expect(p.potential).toBeLessThanOrEqual(POTENTIAL_CAP);
   });
 });
 

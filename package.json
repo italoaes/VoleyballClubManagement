@@ -1,7 +1,7 @@
 {
   "name": "volleymanager",
   "private": true,
-  "version": "26.2.0",
+  "version": "26.3.0",
   "type": "module",
   "description": "VolleyManager — jogo de gestão de vôlei (MVP jogável, web PWA mobile-first)",
   "scripts": {

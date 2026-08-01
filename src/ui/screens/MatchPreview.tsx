@@ -13,9 +13,20 @@ import { simulateFullMatch } from "@domain/liveMatch";
 import type { GameState, Team } from "@domain/types";
 import { Button, Card, FormBar, ScreenHeader, StarRating, TeamBadge } from "../components/ui";
 
-function TeamColumn({ team, state }: { team: Team; state: GameState }): JSX.Element {
+function TeamColumn({
+  team,
+  state,
+  onScout,
+}: {
+  team: Team;
+  state: GameState;
+  onScout: () => void;
+}): JSX.Element {
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, flex: 1 }}>
+    <div
+      onClick={onScout}
+      style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, flex: 1, cursor: "pointer" }}
+    >
       <TeamBadge shortName={team.shortName} crest={team.crest} size={64} />
       <strong style={{ fontSize: "0.85rem", textAlign: "center" }}>{team.name}</strong>
       <StarRating stars={teamStars(team, state.category)} size={13} />
@@ -23,6 +34,7 @@ function TeamColumn({ team, state }: { team: Team; state: GameState }): JSX.Elem
         {positionOf(state, team.id)}º na tabela
       </span>
       <FormBar form={recentForm(state, team.id)} />
+      <span style={{ fontSize: "0.65rem", color: "var(--accent-2)" }}>ver elenco</span>
     </div>
   );
 }
@@ -33,6 +45,7 @@ export function MatchPreview(): JSX.Element {
   const commitPlayoff = useGameStore((s) => s.commitPlayoff);
   const begin = useMatchStore((s) => s.begin);
   const go = useNavStore((s) => s.go);
+  const viewTeam = useNavStore((s) => s.viewTeam);
 
   if (!state) return <p style={{ padding: "1rem" }}>Carregando…</p>;
 
@@ -105,9 +118,9 @@ export function MatchPreview(): JSX.Element {
       <div style={{ padding: "0 1rem 1rem", display: "flex", flexDirection: "column", gap: "0.9rem" }}>
         <Card>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <TeamColumn team={home} state={state} />
+            <TeamColumn team={home} state={state} onScout={() => viewTeam(home.id, "match-preview")} />
             <span style={{ color: "var(--text-dim)", fontWeight: 800, padding: "0 0.4rem" }}>x</span>
-            <TeamColumn team={away} state={state} />
+            <TeamColumn team={away} state={state} onScout={() => viewTeam(away.id, "match-preview")} />
           </div>
           <p style={{ textAlign: "center", color: "var(--text-dim)", fontSize: "0.75rem", marginTop: 10 }}>
             {playerIsHome ? "Você joga em casa" : "Você joga fora"}

@@ -20,6 +20,7 @@ import { Results } from "./screens/Results";
 import { Roster } from "./screens/Roster";
 import { DevelopmentScreen } from "./screens/DevelopmentScreen";
 import { ManagerProfile } from "./screens/ManagerProfile";
+import { TeamView } from "./screens/TeamView";
 import { Menu } from "./screens/Menu";
 import { UpdatePrompt } from "./components/UpdatePrompt";
 
@@ -111,6 +112,8 @@ function CurrentScreen(): JSX.Element {
       return <DevelopmentScreen />;
     case "manager":
       return <ManagerProfile />;
+    case "team-view":
+      return <TeamView />;
     case "menu":
       return <Menu />;
     default:

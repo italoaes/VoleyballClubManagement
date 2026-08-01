@@ -135,6 +135,18 @@ export function Title(): JSX.Element {
           </p>
         ) : null}
       </div>
+
+      {/* Rodapé: versão do jogo */}
+      <footer
+        style={{
+          textAlign: "center",
+          padding: "0 1rem 1rem",
+          color: "var(--text-dim)",
+          fontSize: "0.72rem",
+        }}
+      >
+        VCM26 · v{__APP_VERSION__}
+      </footer>
     </div>
   );
 }

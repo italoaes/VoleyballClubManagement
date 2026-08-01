@@ -5,6 +5,7 @@ import { teamById } from "@domain/selectors";
 import { Position, type Lineup, type Player } from "@domain/types";
 import { LineupError, setLineup as applyLineup } from "@domain/lineup";
 import { Button, Card, ScreenHeader } from "../components/ui";
+import { ForcesDisplay } from "../components/ForcesDisplay";
 
 function overall(p: Player): number {
   const a = p.attributes;
@@ -115,6 +116,15 @@ export function Squad(): JSX.Element {
     setError(null);
   };
 
+  // roster "de prévia" com a seleção atual (para mostrar ATK/DEF ao vivo).
+  // Se a seleção ainda estiver incompleta/duplicada, cai no roster salvo.
+  let previewRoster = team.roster;
+  try {
+    previewRoster = applyLineup(team.roster, toLineup(sel));
+  } catch {
+    previewRoster = team.roster;
+  }
+
   // se veio da tela de partida, volta pra ela; senão, ao dashboard
   const returnTo = state.phase === "league" ? "match-preview" : "dashboard";
 
@@ -133,6 +143,13 @@ export function Squad(): JSX.Element {
     <div>
       <ScreenHeader title="Escalação" subtitle={`${team.name} · 1 lev, 2 pont, 2 cent, 1 oposto, 1 líbero`} />
       <div style={{ padding: "0 1rem 1rem", display: "flex", flexDirection: "column", gap: 12 }}>
+        <Card>
+          <p style={{ fontSize: "0.72rem", color: "var(--text-dim)", marginBottom: 6 }}>
+            FORÇA DO TIME (atualiza conforme você escala)
+          </p>
+          <ForcesDisplay roster={previewRoster} category={state.category} />
+        </Card>
+
         {SLOTS.map((slot) => {
           const options = team.roster.players.filter((p) => p.position === slot.pos);
           const current = sel[slot.key];
